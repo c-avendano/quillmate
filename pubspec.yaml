@@ -10,9 +10,9 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # For Markdown syntax highlighting in the text field (lightweight, no preview)
-  # We use a plain TextField with a custom syntax-aware TextStyle builder
-  # No heavy dependencies needed for the prototype
+  # Cross-platform file open/save dialogs.
+  # Uses the OS-native picker on Linux, macOS, and Windows.
+  file_selector: ^1.0.3
 
 dev_dependencies:
   flutter_test:
@@ -22,8 +22,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Placeholder assets directory (drop real sprite sheets here later)
   assets:
-    - assets/
-
-  fonts: []
+    - assets/idle.png
+    - assets/typing.png
+    - assets/excited.png
+    - assets/encouraging.png

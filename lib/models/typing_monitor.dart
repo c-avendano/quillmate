@@ -10,7 +10,6 @@
 //   • Expose a MascotState that widgets listen to
 
 import 'dart:async';
-import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import 'mascot_state.dart';
@@ -37,12 +36,9 @@ class TypingMonitor extends ChangeNotifier {
   /// Seconds of silence before switching to [MascotMood.encouraging].
   static const int encourageAfterSeconds = 10;
 
-  /// Rolling window size in milliseconds for speed measurement.
-  static const int speedWindowMs = 10000;
-
-  /// Keypresses within [speedWindowMs] that trigger [MascotMood.frantic].
-  /// 15 keys / 10 s ≈ 90 WPM — comfortable fast typing sits below this. This value was 15 before, titan changed it
-  static const int franticThreshold = 30;
+  /// Seconds of encouraging state before returning to [MascotMood.idle]
+  /// (when the user still hasn't typed).
+  static const int idleAfterEncouragingSeconds = 30;
 
   // -----------------------------------------------------------------
   // Internal state
@@ -58,10 +54,6 @@ class TypingMonitor extends ChangeNotifier {
 
   int _encouragementIndex = 0;
 
-  /// Timestamps (ms since epoch) of recent keypresses within the rolling window.
-  /// Using a Queue so we can efficiently drop old entries from the front.
-  final Queue<int> _recentPresses = Queue();
-
   // -----------------------------------------------------------------
   // Public API
   // -----------------------------------------------------------------
@@ -71,19 +63,10 @@ class TypingMonitor extends ChangeNotifier {
   /// Call this whenever the user presses a key in the writing area.
   void onKeyPress() {
     _secondsIdle = 0;
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    // Record this keypress and drop anything outside the rolling window.
-    _recentPresses.addLast(now);
-    while (_recentPresses.first < now - speedWindowMs) {
-      _recentPresses.removeFirst();
-    }
-
     final newKeyCount = _state.keyCount + 1;
-    final isFrantic = _recentPresses.length >= franticThreshold;
 
     _state = _state.copyWith(
-      mood: isFrantic ? MascotMood.frantic : MascotMood.typing,
+      mood: MascotMood.typing,
       encouragementMessage: '',
       keyCount: newKeyCount,
     );
@@ -106,20 +89,6 @@ class TypingMonitor extends ChangeNotifier {
   void _tick(Timer _) {
     _secondsIdle++;
 
-    // Re-evaluate frantic state as the window slides (keypresses age out).
-    if (_state.mood == MascotMood.frantic || _state.mood == MascotMood.typing) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      while (_recentPresses.isNotEmpty &&
-          _recentPresses.first < now - speedWindowMs) {
-        _recentPresses.removeFirst();
-      }
-      final stillFrantic = _recentPresses.length >= franticThreshold;
-      if (_state.mood == MascotMood.frantic && !stillFrantic) {
-        _state = _state.copyWith(mood: MascotMood.typing);
-        notifyListeners();
-      }
-    }
-
     if (_secondsIdle >= encourageAfterSeconds &&
         _state.mood != MascotMood.encouraging) {
       // Transition to encouraging state.
@@ -131,6 +100,8 @@ class TypingMonitor extends ChangeNotifier {
       );
       notifyListeners();
     }
+    // Optional: return to idle after a longer silence.
+    // (Currently we stay in encouraging until the user types again.)
   }
 
   // -----------------------------------------------------------------

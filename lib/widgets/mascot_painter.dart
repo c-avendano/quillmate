@@ -1,19 +1,11 @@
 // widgets/mascot_painter.dart
 //
-// MascotPainter renders the mascot using Flutter's Canvas API.
-// It is intentionally self-contained so it can be replaced by a
-// sprite-sheet animation later with zero changes to the parent widget.
+// Pure rendering — receives a MascotState enum value and an animation tick.
+// No knowledge of keypresses, controllers, or timers.
 //
 // HOW TO SWAP IN A SPRITE SHEET:
-//   1. Remove MascotPainter entirely.
-//   2. In mascot_widget.dart, replace the CustomPaint widget with an
-//      Image.asset() wrapped in an AnimatedSwitcher or use the
-//      `sprite` package to drive frame indices from the same
-//      `animationValue` and `mood` inputs this painter already receives.
-//
-// The painter receives:
-//   animationValue  – 0.0 → 1.0 oscillating value (drives bounce / blink)
-//   mood            – current MascotMood (drives color / expression)
+//   Replace this file's CustomPainter with an Image.asset() driven by the
+//   same (animationValue, state) inputs. MascotWidget passes both already.
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -21,29 +13,28 @@ import 'package:flutter/material.dart';
 import '../models/mascot_state.dart';
 
 class MascotPainter extends CustomPainter {
-  final double animationValue; // 0.0 – 1.0
-  final MascotMood mood;
+  final double animationValue; // 0.0 – 1.0, repeating
+  final MascotState state;
 
-  const MascotPainter({
-    required this.animationValue,
-    required this.mood,
-  });
+  const MascotPainter({required this.animationValue, required this.state});
 
   // -----------------------------------------------------------------
-  // Color scheme per mood
+  // Color per FSM state
   // -----------------------------------------------------------------
-  Color get _bodyColor => switch (mood) {
-        MascotMood.idle        => const Color(0xFF5B8CCC),
-        MascotMood.typing      => const Color(0xFF4CAF50),
-        MascotMood.encouraging => const Color(0xFFFF9800),
-        MascotMood.frantic     => const Color(0xFFE53935),
+  Color get _bodyColor => switch (state) {
+        MascotState.idle        => const Color(0xFF5B8CCC), // blue
+        MascotState.typingSlow  => const Color(0xFF4CAF50), // green
+        MascotState.typingMedium => const Color(0xFFFFD700), // yellow
+        MascotState.typingFast  => const Color(0xFFE53935), // red
+        MascotState.encouraging => const Color(0xFFFF9800), // orange
       };
 
-  Color get _accentColor => switch (mood) {
-        MascotMood.idle        => const Color(0xFF3A6EA8),
-        MascotMood.typing      => const Color(0xFF388E3C),
-        MascotMood.encouraging => const Color(0xFFF57C00),
-        MascotMood.frantic     => const Color(0xFFB71C1C),
+  Color get _accentColor => switch (state) {
+        MascotState.idle        => const Color(0xFF3A6EA8),
+        MascotState.typingSlow  => const Color(0xFF388E3C),
+        MascotState.typingMedium => const Color(0xFFB8960C),
+        MascotState.typingFast  => const Color(0xFFB71C1C),
+        MascotState.encouraging => const Color(0xFFF57C00),
       };
 
   // -----------------------------------------------------------------
@@ -54,46 +45,36 @@ class MascotPainter extends CustomPainter {
     final cx = size.width / 2;
     final cy = size.height / 2;
 
-    // Bob up and down: more energetic when typing, frantic when speeding.
-    final bobAmplitude = switch (mood) {
-      MascotMood.frantic => 10.0,
-      MascotMood.typing  => 6.0,
-      _                  => 2.5,
+    final bobAmplitude = switch (state) {
+      MascotState.typingFast   => 10.0,
+      MascotState.typingMedium => 7.5,
+      MascotState.typingSlow   => 5.0,
+      _                        => 2.5,
     };
-    final bob = math.sin(animationValue * 2 * math.pi) * bobAmplitude;
-
-    // Frantic: add a horizontal shake on top of the vertical bob.
-    final shake = mood == MascotMood.frantic
+    final bob   = math.sin(animationValue * 2 * math.pi) * bobAmplitude;
+    final shake = state == MascotState.typingFast
         ? math.sin(animationValue * 8 * math.pi) * 4.0
         : 0.0;
 
-    // Squash & stretch — subtle organic feel.
     final stretch = 1.0 + math.sin(animationValue * 2 * math.pi) * 0.04;
-    final squash   = 1.0 / stretch;
+    final squash  = 1.0 / stretch;
 
     canvas.save();
     canvas.translate(cx + shake, cy + bob);
     canvas.scale(squash, stretch);
 
-    // --- Body (rounded blob) ---
-    final bodyPaint = Paint()
-      ..color = _bodyColor
-      ..style = PaintingStyle.fill;
-
-    final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.18)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-
     // Shadow
     canvas.drawOval(
       Rect.fromCenter(center: const Offset(2, 6), width: 44, height: 18),
-      shadowPaint,
+      Paint()
+        ..color = Colors.black.withOpacity(0.18)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
 
     // Body
     canvas.drawOval(
       Rect.fromCenter(center: Offset.zero, width: 48, height: 52),
-      bodyPaint,
+      Paint()..color = _bodyColor,
     );
 
     // Belly highlight
@@ -102,45 +83,32 @@ class MascotPainter extends CustomPainter {
       Paint()..color = _bodyColor.withOpacity(0.4),
     );
 
-    // --- Ears ---
-    _drawEar(canvas, -18, -24, _accentColor);
-    _drawEar(canvas,  18, -24, _accentColor);
+    _drawEar(canvas, -18, -24);
+    _drawEar(canvas,  18, -24);
 
-    // --- Eyes ---
-    final blinkProgress = _blinkProgress();
-    _drawEye(canvas, -10, -6, blinkProgress);
-    _drawEye(canvas,  10, -6, blinkProgress);
+    final blink = _blinkProgress();
+    _drawEye(canvas, -10, -6, blink);
+    _drawEye(canvas,  10, -6, blink);
 
-    // --- Mouth (expression changes with mood) ---
     _drawMouth(canvas);
 
-    // --- Blush (encouraging only) ---
-    if (mood == MascotMood.encouraging) {
-      final blushPaint = Paint()
+    // Blush — encouraging only
+    if (state == MascotState.encouraging) {
+      final blush = Paint()
         ..color = Colors.pink.withOpacity(0.35)
         ..style = PaintingStyle.fill;
-      canvas.drawOval(
-        Rect.fromCenter(center: const Offset(-14, 4), width: 12, height: 7),
-        blushPaint,
-      );
-      canvas.drawOval(
-        Rect.fromCenter(center: const Offset(14, 4), width: 12, height: 7),
-        blushPaint,
-      );
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-14, 4), width: 12, height: 7), blush);
+      canvas.drawOval(Rect.fromCenter(center: const Offset( 14, 4), width: 12, height: 7), blush);
     }
 
     canvas.restore();
   }
 
-  void _drawEar(Canvas canvas, double x, double y, Color color) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
+  void _drawEar(Canvas canvas, double x, double y) {
     canvas.drawOval(
       Rect.fromCenter(center: Offset(x, y), width: 14, height: 18),
-      paint,
+      Paint()..color = _accentColor,
     );
-    // Inner ear
     canvas.drawOval(
       Rect.fromCenter(center: Offset(x, y + 1), width: 7, height: 10),
       Paint()..color = Colors.pink.shade200.withOpacity(0.7),
@@ -148,87 +116,62 @@ class MascotPainter extends CustomPainter {
   }
 
   void _drawEye(Canvas canvas, double x, double y, double blinkProgress) {
-    final eyePaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
-    final eyeH = 10.0 * (1.0 - blinkProgress.clamp(0.0, 0.95));
-
+    final eyeH = (10.0 * (1.0 - blinkProgress.clamp(0.0, 0.95))).clamp(1.0, 10.0);
     canvas.drawOval(
-      Rect.fromCenter(center: Offset(x, y), width: 10, height: eyeH.clamp(1.0, 10)),
-      eyePaint,
+      Rect.fromCenter(center: Offset(x, y), width: 10, height: eyeH),
+      Paint()..color = Colors.white,
     );
-
     if (eyeH > 3) {
-      // Pupil
-      canvas.drawCircle(
-        Offset(x + 1, y + 1),
-        3.5,
-        Paint()..color = const Color(0xFF1A1A2E),
-      );
-      // Shine
-      canvas.drawCircle(
-        Offset(x + 2.5, y - 1),
-        1.2,
-        Paint()..color = Colors.white,
-      );
+      canvas.drawCircle(Offset(x + 1, y + 1), 3.5, Paint()..color = const Color(0xFF1A1A2E));
+      canvas.drawCircle(Offset(x + 2.5, y - 1), 1.2, Paint()..color = Colors.white);
     }
   }
 
   void _drawMouth(Canvas canvas) {
-    final paint = Paint()
+    final stroke = Paint()
       ..color = Colors.white.withOpacity(0.9)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
 
-    final path = Path();
-    switch (mood) {
-      case MascotMood.idle:
-        // Neutral small smile.
-        path.moveTo(-7, 10);
-        path.quadraticBezierTo(0, 15, 7, 10);
-      case MascotMood.typing:
-        // Open excited mouth.
-        path.moveTo(-8, 10);
-        path.quadraticBezierTo(0, 18, 8, 10);
-        canvas.drawPath(path, paint);
-        final fillPath = Path()
-          ..moveTo(-8, 10)
-          ..quadraticBezierTo(0, 18, 8, 10)
-          ..quadraticBezierTo(0, 13, -8, 10);
+    switch (state) {
+      case MascotState.idle:
         canvas.drawPath(
-          fillPath,
-          Paint()
-            ..color = const Color(0xFF1A1A2E).withOpacity(0.6)
-            ..style = PaintingStyle.fill,
+          Path()..moveTo(-7, 10)..quadraticBezierTo(0, 15, 7, 10),
+          stroke,
         );
-        return;
-      case MascotMood.frantic:
-        // Wide-open panicked O mouth.
-        canvas.drawOval(
-          Rect.fromCenter(center: const Offset(0, 13), width: 14, height: 12),
-          Paint()
-            ..color = const Color(0xFF1A1A2E).withOpacity(0.7)
-            ..style = PaintingStyle.fill,
+
+      case MascotState.typingSlow:
+        // Small relaxed smile — engaged but not rushed.
+        canvas.drawPath(
+          Path()..moveTo(-6, 10)..quadraticBezierTo(0, 14, 6, 10),
+          stroke,
         );
-        canvas.drawOval(
-          Rect.fromCenter(center: const Offset(0, 13), width: 14, height: 12),
-          paint..style = PaintingStyle.stroke,
+
+      case MascotState.typingMedium:
+        // Open excited mouth with fill — picking up pace.
+        final arc = Path()..moveTo(-8, 10)..quadraticBezierTo(0, 18, 8, 10);
+        canvas.drawPath(arc, stroke);
+        canvas.drawPath(
+          Path()..moveTo(-8, 10)..quadraticBezierTo(0, 18, 8, 10)..quadraticBezierTo(0, 13, -8, 10),
+          Paint()..color = const Color(0xFF1A1A2E).withOpacity(0.6)..style = PaintingStyle.fill,
         );
-        return;
-      case MascotMood.encouraging:
-        // Big warm smile.
-        path.moveTo(-10, 10);
-        path.quadraticBezierTo(0, 20, 10, 10);
+
+      case MascotState.typingFast:
+        // Wide-open panicked O
+        final oval = Rect.fromCenter(center: const Offset(0, 13), width: 14, height: 12);
+        canvas.drawOval(oval, Paint()..color = const Color(0xFF1A1A2E).withOpacity(0.7)..style = PaintingStyle.fill);
+        canvas.drawOval(oval, stroke..style = PaintingStyle.stroke);
+
+      case MascotState.encouraging:
+        canvas.drawPath(
+          Path()..moveTo(-10, 10)..quadraticBezierTo(0, 20, 10, 10),
+          stroke,
+        );
     }
-    canvas.drawPath(path, paint);
   }
 
-  // Blink every ~4 seconds (driven by animationValue cycling 0→1).
-  // animationValue oscillates; we trigger a blink when it crosses 0.9.
   double _blinkProgress() {
-    // Map animationValue to a blink curve: sharp spike near 0.92.
     final t = animationValue;
     if (t > 0.90 && t < 0.97) {
       return math.sin((t - 0.90) / 0.07 * math.pi);
@@ -238,5 +181,5 @@ class MascotPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(MascotPainter old) =>
-      old.animationValue != animationValue || old.mood != mood;
+      old.animationValue != animationValue || old.state != state;
 }
