@@ -1,0 +1,29 @@
+name: quillmate
+description: A distraction-free Markdown writing environment with an animated mascot companion.
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # For Markdown syntax highlighting in the text field (lightweight, no preview)
+  # We use a plain TextField with a custom syntax-aware TextStyle builder
+  # No heavy dependencies needed for the prototype
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  # Placeholder assets directory (drop real sprite sheets here later)
+  assets:
+    - assets/
+
+  fonts: []
