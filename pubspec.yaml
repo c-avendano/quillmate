@@ -11,8 +11,10 @@ dependencies:
     sdk: flutter
 
   # Cross-platform file open/save dialogs.
-  # Uses the OS-native picker on Linux, macOS, and Windows.
   file_selector: ^1.0.3
+
+  # Hides OS title bar / window decorations in focus mode.
+  window_manager: ^0.3.9
 
 dev_dependencies:
   flutter_test:

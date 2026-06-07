@@ -1,23 +1,27 @@
 // widgets/writing_screen.dart
 //
 // Root screen. Wires four controllers together:
-//   SettingsController         → targetWpm, focusMode, backgroundColor, fontFamily
+//   SettingsController         → theme, fontFamily, focusMode, targetWpm
 //   WritingActivityController  → WPM measurement → MascotState
 //   FileController             → file I/O → editor content + title
 //   WritingArea (GlobalKey)    → receives loadContent() after file ops
 //
-// Keyboard shortcuts
-// ──────────────────
-// We use CallbackShortcuts + SingleActivator instead of Shortcuts/Actions +
-// LogicalKeySet. LogicalKeySet with three keys is unreliable on Linux/GTK
-// because key repeat and modifier ordering vary by compositor.
-// SingleActivator handles Ctrl, Shift, and Alt modifiers correctly.
+// Focus mode + title bar
+// ──────────────────────
+// Toggling focus mode calls windowManager.setFullScreen(true/false).
+// This removes the OS title bar (window decorations) entirely on Linux/GTK,
+// giving a fully distraction-free canvas.
+// Ctrl+Shift+F and the toolbar button both call _toggleFocusMode().
 //
-//   Ctrl+S          → save
-//   Ctrl+Shift+F    → toggle focus mode
+// Theme propagation
+// ─────────────────
+// Every chrome widget (status bar, toolbar) reads its colours from
+// _settings.chromeColor and _settings.chromeTextColor so they adapt
+// when the user switches theme. No hardcoded dark colours anywhere.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../models/file_controller.dart';
 import '../models/mascot_state.dart';
@@ -75,6 +79,18 @@ class _WritingScreenState extends State<WritingScreen> {
 
   bool get _focusMode => _settings.focusMode;
 
+  // ---- Focus mode toggle ----
+  //
+  // Sets the app fullscreen via window_manager when entering focus mode.
+  // This removes the OS title bar completely — not just the app toolbar.
+  // Exiting restores the window to its previous state.
+
+  Future<void> _toggleFocusMode() async {
+    final next = !_settings.focusMode;
+    _settings.setFocusMode(next);
+    await windowManager.setFullScreen(next);
+  }
+
   // ---- File handlers ----
 
   Future<void> _handleNew()  async => _fileController.newFile(onConfirm: _showDiscardDialog);
@@ -85,11 +101,11 @@ class _WritingScreenState extends State<WritingScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E3A),
-        title:   const Text('Unsaved changes',
-            style: TextStyle(color: Color(0xFFE2E2E2))),
-        content: const Text('You have unsaved changes. Discard them?',
-            style: TextStyle(color: Color(0xAAE2E2E2))),
+        backgroundColor: _settings.chromeColor,
+        title:   Text('Unsaved changes',
+            style: TextStyle(color: _settings.textColor)),
+        content: Text('You have unsaved changes. Discard them?',
+            style: TextStyle(color: _settings.chromeTextColor)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -128,46 +144,44 @@ class _WritingScreenState extends State<WritingScreen> {
       backgroundColor: _settings.backgroundColor,
       endDrawer:       SettingsPanel(settings: _settings),
       body: CallbackShortcuts(
-        // ── Keyboard shortcuts ───────────────────────────────────────────
-        // SingleActivator is the correct API for desktop shortcuts with
-        // modifier keys. It handles Shift correctly on Linux/GTK where
-        // LogicalKeySet with three keys often fails.
         bindings: {
           const SingleActivator(LogicalKeyboardKey.keyS, control: true):
               _handleSave,
           const SingleActivator(LogicalKeyboardKey.keyF,
               control: true, shift: true):
-              _settings.toggleFocusMode,
+              _toggleFocusMode,
         },
         child: Focus(
-          // Focus is required so CallbackShortcuts receives key events even
-          // when no child widget has explicit focus.
           autofocus: true,
           child: Stack(
             children: [
-              // ---- Main editor column ----
               Column(
                 children: [
-                  if (!_focusMode)
+                  // Status bar and toolbar — hidden in focus mode.
+                  if (!_focusMode) ...[
                     _StatusBar(
                       displayName:       _fileController.displayName,
                       hasUnsavedChanges: _fileController.hasUnsavedChanges,
                       mascotState:       _activityController.mascotState,
                       currentWpm:        _activityController.currentWpm,
                       targetWpm:         _settings.targetWpm,
+                      chromeColor:       _settings.chromeColor,
+                      chromeTextColor:   _settings.chromeTextColor,
                     ),
-                  if (!_focusMode)
-                    const Divider(height: 1, color: Color(0x22FFFFFF)),
-                  if (!_focusMode)
+                    Divider(height: 1,
+                        color: _settings.chromeTextColor.withOpacity(0.15)),
                     _Toolbar(
+                      chromeColor:     _settings.chromeColor,
+                      chromeTextColor: _settings.chromeTextColor,
                       onNew:      _handleNew,
                       onOpen:     _handleOpen,
                       onSave:     _handleSave,
-                      onFocus:    _settings.toggleFocusMode,
+                      onFocus:    _toggleFocusMode,
                       onSettings: () => _scaffoldKey.currentState?.openEndDrawer(),
                     ),
-                  if (!_focusMode)
-                    const Divider(height: 1, color: Color(0x22FFFFFF)),
+                    Divider(height: 1,
+                        color: _settings.chromeTextColor.withOpacity(0.15)),
+                  ],
 
                   Expanded(
                     child: WritingArea(
@@ -182,18 +196,17 @@ class _WritingScreenState extends State<WritingScreen> {
                 ],
               ),
 
-              // ---- Focus mode exit hint ----
+              // Focus mode exit hint.
               if (_focusMode)
                 Positioned(
-                  bottom: 12,
-                  left: 0, right: 0,
+                  bottom: 16, left: 0, right: 0,
                   child: Center(
                     child: GestureDetector(
-                      onTap: _settings.toggleFocusMode,
+                      onTap: _toggleFocusMode,
                       child: Text(
                         'Ctrl+Shift+F to exit focus mode',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.18),
+                          color: _settings.textColor.withOpacity(0.2),
                           fontSize: 11,
                         ),
                       ),
@@ -201,7 +214,7 @@ class _WritingScreenState extends State<WritingScreen> {
                   ),
                 ),
 
-              // ---- Draggable mascot ----
+              // Draggable mascot — always visible.
               Positioned(
                 left: _mascotPosition.dx,
                 top:  _mascotPosition.dy,
@@ -235,6 +248,8 @@ class _WritingScreenState extends State<WritingScreen> {
 // ---------------------------------------------------------------------------
 
 class _Toolbar extends StatelessWidget {
+  final Color        chromeColor;
+  final Color        chromeTextColor;
   final VoidCallback onNew;
   final VoidCallback onOpen;
   final VoidCallback onSave;
@@ -242,6 +257,8 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onSettings;
 
   const _Toolbar({
+    required this.chromeColor,
+    required this.chromeTextColor,
     required this.onNew,
     required this.onOpen,
     required this.onSave,
@@ -253,17 +270,16 @@ class _Toolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 36,
-      color: Colors.black.withOpacity(0.25),
+      color: chromeColor,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
-          _Btn(icon: Icons.insert_drive_file_outlined, tip: 'New',             onPressed: onNew),
-          _Btn(icon: Icons.folder_open_outlined,       tip: 'Open',            onPressed: onOpen),
-          _Btn(icon: Icons.save_outlined,              tip: 'Save  (Ctrl+S)',  onPressed: onSave),
+          _Btn(icon: Icons.insert_drive_file_outlined, tip: 'New',                        color: chromeTextColor, onPressed: onNew),
+          _Btn(icon: Icons.folder_open_outlined,       tip: 'Open',                       color: chromeTextColor, onPressed: onOpen),
+          _Btn(icon: Icons.save_outlined,              tip: 'Save  (Ctrl+S)',             color: chromeTextColor, onPressed: onSave),
           const Spacer(),
-          _Btn(icon: Icons.center_focus_strong_outlined,
-               tip: 'Focus mode  (Ctrl+Shift+F)', onPressed: onFocus),
-          _Btn(icon: Icons.tune, tip: 'Settings', onPressed: onSettings),
+          _Btn(icon: Icons.center_focus_strong_outlined, tip: 'Focus  (Ctrl+Shift+F)',   color: chromeTextColor, onPressed: onFocus),
+          _Btn(icon: Icons.tune,                       tip: 'Settings',                  color: chromeTextColor, onPressed: onSettings),
         ],
       ),
     );
@@ -273,16 +289,17 @@ class _Toolbar extends StatelessWidget {
 class _Btn extends StatelessWidget {
   final IconData     icon;
   final String       tip;
+  final Color        color;
   final VoidCallback onPressed;
-  const _Btn({required this.icon, required this.tip, required this.onPressed});
+  const _Btn({required this.icon, required this.tip, required this.color, required this.onPressed});
 
   @override
   Widget build(BuildContext context) => Tooltip(
         message: tip,
         child: IconButton(
           icon:         Icon(icon, size: 18),
-          color:        const Color(0xAAE2E2E2),
-          hoverColor:   const Color(0x22FFFFFF),
+          color:        color,
+          hoverColor:   color.withOpacity(0.12),
           splashRadius: 16,
           onPressed:    onPressed,
         ),
@@ -299,6 +316,8 @@ class _StatusBar extends StatelessWidget {
   final MascotState mascotState;
   final int         currentWpm;
   final int         targetWpm;
+  final Color       chromeColor;
+  final Color       chromeTextColor;
 
   const _StatusBar({
     required this.displayName,
@@ -306,6 +325,8 @@ class _StatusBar extends StatelessWidget {
     required this.mascotState,
     required this.currentWpm,
     required this.targetWpm,
+    required this.chromeColor,
+    required this.chromeTextColor,
   });
 
   String get _moodLabel => switch (mascotState) {
@@ -320,28 +341,31 @@ class _StatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final wpmColor = switch (mascotState) {
       MascotState.typingSlow   => const Color(0xFF5B8CCC),
-      MascotState.typingMedium => const Color(0xFFFFD700),
+      MascotState.typingMedium => const Color(0xFFFFAA00),
       MascotState.typingFast   => const Color(0xFFE53935),
-      _                        => const Color(0x66E2E2E2),
+      _                        => chromeTextColor.withOpacity(0.5),
     };
 
     return Container(
       height: 30,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      color: Colors.black.withOpacity(0.3),
+      color: chromeColor,
       child: Row(
         children: [
-          const Text('QuillMate',
+          Text('QuillMate',
               style: TextStyle(
-                color: Color(0xFF7EC8E3), fontSize: 12,
-                fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                color: chromeTextColor,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              )),
           const SizedBox(width: 12),
           Text(
             hasUnsavedChanges ? '● $displayName' : displayName,
             style: TextStyle(
               color: hasUnsavedChanges
                   ? const Color(0xFFFF9800)
-                  : const Color(0x66E2E2E2),
+                  : chromeTextColor.withOpacity(0.5),
               fontSize: 11,
             ),
           ),
@@ -351,7 +375,8 @@ class _StatusBar extends StatelessWidget {
                   color: wpmColor, fontSize: 11, fontFamily: 'monospace')),
           const SizedBox(width: 20),
           Text(_moodLabel,
-              style: const TextStyle(color: Color(0x88E2E2E2), fontSize: 11)),
+              style: TextStyle(
+                  color: chromeTextColor.withOpacity(0.6), fontSize: 11)),
         ],
       ),
     );

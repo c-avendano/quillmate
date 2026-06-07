@@ -1,26 +1,21 @@
-// main.dart
+// main.dart — QuillMate entry point.
 //
-// Entry point for QuillMate — a distraction-free Markdown writing app
-// with an animated mascot companion.
-//
-// Architecture overview:
-//   main.dart                              → App bootstrap
-//   models/mascot_state.dart               → FSM enum: idle/typingSlow/typingFast/encouraging
-//   models/writing_activity_controller.dart → Owns the FSM; tracks speed; exposes state
-//   sprites/sprite_sheet.dart              → Pure data: asset path, frame count, frame size
-//   sprites/sprite_animation_config.dart   → Maps each MascotState → sheet + FPS
-//   widgets/writing_area.dart              → Full-screen Markdown text editor
-//   widgets/sprite_animation_widget.dart   → Loads sheet, advances frames via Ticker
-//   widgets/mascot_widget.dart             → Bubble + sprite layer + placeholder fallback
-//   widgets/mascot_painter.dart            → CustomPainter fallback (no asset needed)
-//   utils/markdown_highlighter.dart        → Lightweight syntax coloring for the editor
+// Initialises window_manager before runApp so focus mode can hide the
+// OS title bar (window decorations) on Linux/GTK.
 
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'widgets/writing_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // window_manager must be initialised before the window is shown.
+  // We set a sensible minimum size so the editor is never unusable.
+  await windowManager.ensureInitialized();
+  await windowManager.setMinimumSize(const Size(600, 400));
+
   runApp(const QuillMateApp());
 }
 
@@ -38,7 +33,6 @@ class QuillMateApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
-        fontFamily: 'monospace',
       ),
       home: const WritingScreen(),
     );

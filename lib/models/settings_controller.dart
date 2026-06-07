@@ -3,14 +3,12 @@
 // All user preferences in one place.
 //
 // Appearance:
-//   theme      — one of three presets (White, Black, Sepia)
-//                each preset carries a background colour and a text colour
-//                so the editor is always readable without extra logic
-//   fontFamily — any font installed on the system
+//   theme      — White / Black / Sepia (each bundles background + text colour)
+//   fontFamily — system font family name
 //
-// Other settings:
-//   targetWpm  — WPM target for the mascot FSM
-//   focusMode  — hides chrome and centres the editor column
+// Other:
+//   targetWpm  — WPM target for mascot FSM bands
+//   focusMode  — hides toolbar/status bar and enters OS fullscreen
 
 import 'package:flutter/material.dart';
 
@@ -18,35 +16,53 @@ import 'package:flutter/material.dart';
 // Theme presets
 // ---------------------------------------------------------------------------
 //
-// A preset bundles background + text colour so callers never have to
-// derive one from the other. Add new presets here; nothing else changes.
+// Each preset carries:
+//   background — the editor / window background colour
+//   text       — the main prose colour (high contrast on background)
+//   chrome     — the colour for the status bar / toolbar overlay
+//
+// The markdown highlighter reads the text colour's luminance and
+// automatically picks a matching syntax-colour palette.
 
 class EditorThemePreset {
   final String label;
   final Color  background;
   final Color  text;
+  final Color  chrome;        // status bar / toolbar background tint
+  final Color  chromeText;    // labels inside the chrome
   const EditorThemePreset({
     required this.label,
     required this.background,
     required this.text,
+    required this.chrome,
+    required this.chromeText,
   });
 }
 
 const List<EditorThemePreset> kEditorThemes = [
+  // Dark — the original night-writing theme.
   EditorThemePreset(
-    label:      'Black',
-    background: Color(0xFF1A1A2E),
-    text:       Color(0xFFE2E2E2),
+    label:       'Dark',
+    background:  Color(0xFF1A1A2E),
+    text:        Color(0xFFE2E2E2),
+    chrome:      Color(0xFF12122A),
+    chromeText:  Color(0xAAE2E2E2),
   ),
+  // White — clean paper look; dark ink text for readability.
   EditorThemePreset(
-    label:      'White',
-    background: Color(0xFFF5F5F5),
-    text:       Color(0xFF1A1A1A),
+    label:       'White',
+    background:  Color(0xFFFFFFFF),
+    text:        Color(0xFF1C1C1C),
+    chrome:      Color(0xFFEEEEEE),
+    chromeText:  Color(0xFF555555),
   ),
+  // Sepia — warm parchment; dark brown ink.
   EditorThemePreset(
-    label:      'Sepia',
-    background: Color(0xFFF4ECD8),
-    text:       Color(0xFF3B2F2F),
+    label:       'Sepia',
+    background:  Color(0xFFF5ECD7),
+    text:        Color(0xFF2C1A0E),
+    chrome:      Color(0xFFE8D9BE),
+    chromeText:  Color(0xFF6B4C30),
   ),
 ];
 
@@ -69,9 +85,10 @@ class SettingsController extends ChangeNotifier {
   EditorThemePreset _theme = kEditorThemes.first;
   EditorThemePreset get theme => _theme;
 
-  // Convenience getters so widgets don't need to know about the preset struct.
   Color get backgroundColor => _theme.background;
   Color get textColor        => _theme.text;
+  Color get chromeColor      => _theme.chrome;
+  Color get chromeTextColor  => _theme.chromeText;
 
   void setTheme(EditorThemePreset preset) {
     if (_theme == preset) return;
@@ -80,10 +97,6 @@ class SettingsController extends ChangeNotifier {
   }
 
   // ---- Font family ----
-  //
-  // Stores whatever string the user picks from the dropdown.
-  // An empty string means "use the platform default" — Flutter resolves
-  // 'sans-serif' and 'serif' generics automatically, so they are safe fallbacks.
 
   String _fontFamily = 'sans-serif';
   String get fontFamily => _fontFamily;
