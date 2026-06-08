@@ -1,41 +1,37 @@
 // widgets/mascot_widget.dart
 //
-// MascotWidget is a pure display component.
-// It receives a MascotState and an optional message string.
-// It knows nothing about keyboard events, timers, or the controller.
+// Pure display. Receives MascotState + optional message + optional custom path.
 //
-// Rendering strategy:
-//   1. Look up the SpriteAnimationConfig for the current MascotState.
-//   2. Pass it to SpriteAnimationWidget, which loads the sheet and animates.
-//   3. While the image is loading (or if the asset is missing), show the
-//      MascotPainter placeholder so the mascot is always visible.
+// Rendering priority:
+//   1. Custom sprite sheet (user-supplied file path via settings)
+//   2. Bundled asset sprite sheet (assets/idle.png etc.)
+//   3. CustomPainter placeholder (always renders; sits underneath)
 //
-// The fallback is permanent until a real asset is placed at the expected path.
-// No code changes are needed when assets are added — Flutter's image cache
-// picks them up on the next cold start.
+// The placeholder is always visible as layer 1 of a Stack.
+// The sprite layer sits on top as layer 2 and covers it once loaded.
 
 import 'package:flutter/material.dart';
 
 import '../models/mascot_state.dart';
+import '../models/settings_controller.dart';
 import '../sprites/sprite_animation_config.dart';
+import '../sprites/sprite_sheet.dart';
 import 'mascot_painter.dart';
 import 'sprite_animation_widget.dart';
 
-/// Rendered size of the mascot on screen.
 const double kMascotSize = 80.0;
-const Size kMascotDisplaySize = Size(kMascotSize, kMascotSize);
+const Size   kMascotDisplaySize = Size(kMascotSize, kMascotSize);
 
 class MascotWidget extends StatelessWidget {
-  final MascotState state;
-
-  /// Message shown in the speech bubble above the mascot.
-  /// Empty string = no bubble.
-  final String message;
+  final MascotState         state;
+  final String              message;
+  final SettingsController? settings; // optional — null = use bundled assets
 
   const MascotWidget({
     super.key,
     required this.state,
-    this.message = '',
+    this.message  = '',
+    this.settings,
   });
 
   Color get _bubbleColor => switch (state) {
@@ -44,44 +40,53 @@ class MascotWidget extends StatelessWidget {
         _                       => Colors.transparent,
       };
 
+  /// Build the config to pass to SpriteAnimationWidget.
+  /// If a custom path is set, every state uses that single sheet.
+  SpriteAnimationConfig _config() {
+    final custom = settings?.customMascotPath;
+    if (custom != null && custom.isNotEmpty) {
+      return SpriteAnimationConfig(
+        sheet: SpriteSheet(
+          assetPath:   custom,
+          frameCount:  settings!.customFrameCount,
+          frameWidth:  settings!.customFrameWidth,
+          frameHeight: settings!.customFrameHeight,
+          isFilePath:  true, // load from disk, not from assets bundle
+        ),
+        fps: kMascotAnimations[state]?.fps ?? 8,
+      );
+    }
+    return kMascotAnimations[state]!;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final config = kMascotAnimations[state]!;
+    final config = _config();
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Speech bubble — fades in/out when message changes.
+        // Speech bubble
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           child: message.isNotEmpty
               ? _Bubble(
-                  key: ValueKey(message),
+                  key:     ValueKey(message),
                   message: message,
-                  color: _bubbleColor,
+                  color:   _bubbleColor,
                 )
               : const SizedBox.shrink(),
         ),
         const SizedBox(height: 4),
 
-        // Sprite animation with a placeholder painted underneath.
-        // The Stack lets the placeholder show through until the image loads.
         SizedBox(
-          width: kMascotSize,
-          height: kMascotSize,
+          width: kMascotSize, height: kMascotSize,
           child: Stack(
             children: [
-              // Layer 1: CustomPainter placeholder (always present, renders
-              // instantly). Covered by the sprite once the image is ready.
               _PlaceholderMascot(state: state),
-
-              // Layer 2: Sprite animation (transparent until image loads).
               SpriteAnimationWidget(
-                // Key forces a clean rebuild when the state changes so the
-                // Ticker resets its elapsed time — prevents a stale frame
-                // from a previous clip showing for one tick.
-                key: ValueKey(state),
-                config: config,
+                key:         ValueKey('${state.name}-${config.sheet.assetPath}'),
+                config:      config,
                 displaySize: kMascotDisplaySize,
               ),
             ],
@@ -93,66 +98,56 @@ class MascotWidget extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Placeholder — wraps the existing CustomPainter so it animates on its own
+// Placeholder — animated CustomPainter shown until/if the sprite loads
 // ---------------------------------------------------------------------------
 
 class _PlaceholderMascot extends StatefulWidget {
   final MascotState state;
   const _PlaceholderMascot({required this.state});
-
   @override
   State<_PlaceholderMascot> createState() => _PlaceholderMascotState();
 }
 
 class _PlaceholderMascotState extends State<_PlaceholderMascot>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+  late AnimationController _ctrl;
 
   static const Map<MascotState, Duration> _durations = {
-    MascotState.idle:        Duration(milliseconds: 2800),
-    MascotState.typingSlow:  Duration(milliseconds: 900),
+    MascotState.idle:         Duration(milliseconds: 2800),
+    MascotState.typingSlow:   Duration(milliseconds: 900),
     MascotState.typingMedium: Duration(milliseconds: 550),
-    MascotState.typingFast:  Duration(milliseconds: 300),
-    MascotState.encouraging: Duration(milliseconds: 1600),
+    MascotState.typingFast:   Duration(milliseconds: 300),
+    MascotState.encouraging:  Duration(milliseconds: 1600),
   };
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: _durations[widget.state]!,
-    )..repeat();
+    _ctrl = AnimationController(
+        vsync: this, duration: _durations[widget.state]!)
+      ..repeat();
   }
 
   @override
   void didUpdateWidget(_PlaceholderMascot old) {
     super.didUpdateWidget(old);
     if (old.state != widget.state) {
-      _controller.duration = _durations[widget.state];
-      if (!_controller.isAnimating) _controller.repeat();
+      _ctrl.duration = _durations[widget.state];
+      if (!_ctrl.isAnimating) _ctrl.repeat();
     }
   }
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  void dispose() { _ctrl.dispose(); super.dispose(); }
 
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (_, __) => CustomPaint(
-        painter: MascotPainter(
-          animationValue: _controller.value,
-          state: widget.state,
-        ),
-        size: kMascotDisplaySize,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _ctrl,
+    builder: (_, __) => CustomPaint(
+      painter: MascotPainter(animationValue: _ctrl.value, state: widget.state),
+      size: kMascotDisplaySize,
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -161,33 +156,29 @@ class _PlaceholderMascotState extends State<_PlaceholderMascot>
 
 class _Bubble extends StatelessWidget {
   final String message;
-  final Color color;
-
+  final Color  color;
   const _Bubble({super.key, required this.message, required this.color});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.25),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Text(
-        message,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 13,
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: BoxDecoration(
+      color:        color,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color:      Colors.black.withOpacity(0.15),
+          blurRadius: 8,
+          offset:     const Offset(0, 3),
         ),
-      ),
-    );
-  }
+      ],
+    ),
+    child: Text(message,
+        style: const TextStyle(
+          color:      Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize:   13,
+          fontFamily: 'sans-serif',
+        )),
+  );
 }

@@ -1,68 +1,71 @@
 // models/settings_controller.dart
 //
-// All user preferences in one place.
+// Single source of truth for all user preferences.
 //
-// Appearance:
-//   theme      — White / Black / Sepia (each bundles background + text colour)
-//   fontFamily — system font family name
-//
-// Other:
-//   targetWpm  — WPM target for mascot FSM bands
-//   focusMode  — hides toolbar/status bar and enters OS fullscreen
+// Theme: three presets (Light / Sepia / Dark), each bundling
+//   background, canvas, text, chrome, chromeText, border, primary colours.
+// Font: system font family name.
+// Focus mode: hides chrome, enters OS fullscreen.
+// Custom mascot: optional file path to a user-supplied sprite sheet.
 
 import 'package:flutter/material.dart';
 
 // ---------------------------------------------------------------------------
 // Theme presets
 // ---------------------------------------------------------------------------
-//
-// Each preset carries:
-//   background — the editor / window background colour
-//   text       — the main prose colour (high contrast on background)
-//   chrome     — the colour for the status bar / toolbar overlay
-//
-// The markdown highlighter reads the text colour's luminance and
-// automatically picks a matching syntax-colour palette.
 
 class EditorThemePreset {
   final String label;
   final Color  background;
+  final Color  canvas;
   final Color  text;
-  final Color  chrome;        // status bar / toolbar background tint
-  final Color  chromeText;    // labels inside the chrome
+  final Color  chrome;
+  final Color  chromeText;
+  final Color  border;
+  final Color  primary;
+
   const EditorThemePreset({
     required this.label,
     required this.background,
+    required this.canvas,
     required this.text,
     required this.chrome,
     required this.chromeText,
+    required this.border,
+    required this.primary,
   });
 }
 
 const List<EditorThemePreset> kEditorThemes = [
-  // Dark — the original night-writing theme.
   EditorThemePreset(
-    label:       'Dark',
-    background:  Color(0xFF1A1A2E),
-    text:        Color(0xFFE2E2E2),
-    chrome:      Color(0xFF12122A),
-    chromeText:  Color(0xAAE2E2E2),
+    label:       'Light',
+    background:  Color(0xFFFCF9F8),
+    canvas:      Color(0xFFFFFFFF),
+    text:        Color(0xFF1B1C1C),
+    chrome:      Color(0xFFF6F3F2),
+    chromeText:  Color(0xFF3D4947),
+    border:      Color(0xFFBCC9C6),
+    primary:     Color(0xFF006A62),
   ),
-  // White — clean paper look; dark ink text for readability.
-  EditorThemePreset(
-    label:       'White',
-    background:  Color(0xFFFFFFFF),
-    text:        Color(0xFF1C1C1C),
-    chrome:      Color(0xFFEEEEEE),
-    chromeText:  Color(0xFF555555),
-  ),
-  // Sepia — warm parchment; dark brown ink.
   EditorThemePreset(
     label:       'Sepia',
-    background:  Color(0xFFF5ECD7),
+    background:  Color(0xFFF0E8D8),
+    canvas:      Color(0xFFFAF3E4),
     text:        Color(0xFF2C1A0E),
     chrome:      Color(0xFFE8D9BE),
     chromeText:  Color(0xFF6B4C30),
+    border:      Color(0xFFD4C4A0),
+    primary:     Color(0xFF5D4037),
+  ),
+  EditorThemePreset(
+    label:       'Dark',
+    background:  Color(0xFF111827),
+    canvas:      Color(0xFF1E2433),
+    text:        Color(0xFFE2E2E2),
+    chrome:      Color(0xFF0D1117),
+    chromeText:  Color(0xFF9CA3AF),
+    border:      Color(0xFF2D3748),
+    primary:     Color(0xFF5FDACC),
   ),
 ];
 
@@ -80,15 +83,18 @@ const int kMaxTargetWpm     = 120;
 
 class SettingsController extends ChangeNotifier {
 
-  // ---- Appearance ----
+  // ---- Theme ----
 
   EditorThemePreset _theme = kEditorThemes.first;
   EditorThemePreset get theme => _theme;
 
   Color get backgroundColor => _theme.background;
+  Color get canvasColor      => _theme.canvas;
   Color get textColor        => _theme.text;
   Color get chromeColor      => _theme.chrome;
   Color get chromeTextColor  => _theme.chromeText;
+  Color get borderColor      => _theme.border;
+  Color get primaryColor     => _theme.primary;
 
   void setTheme(EditorThemePreset preset) {
     if (_theme == preset) return;
@@ -96,7 +102,7 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---- Font family ----
+  // ---- Font ----
 
   String _fontFamily = 'sans-serif';
   String get fontFamily => _fontFamily;
@@ -132,6 +138,40 @@ class SettingsController extends ChangeNotifier {
   void setFocusMode(bool value) {
     if (_focusMode == value) return;
     _focusMode = value;
+    notifyListeners();
+  }
+
+  // ---- Custom mascot ----
+  //
+  // When set, MascotWidget loads this file path instead of bundled assets.
+  // The file must be a horizontal-strip PNG sprite sheet.
+
+  String? _customMascotPath;
+  String? get customMascotPath => _customMascotPath;
+
+  int    _customFrameCount  = 4;
+  double _customFrameWidth  = 80;
+  double _customFrameHeight = 80;
+
+  int    get customFrameCount  => _customFrameCount;
+  double get customFrameWidth  => _customFrameWidth;
+  double get customFrameHeight => _customFrameHeight;
+
+  void setCustomMascot({
+    required String path,
+    int    frameCount  = 4,
+    double frameWidth  = 80,
+    double frameHeight = 80,
+  }) {
+    _customMascotPath  = path;
+    _customFrameCount  = frameCount;
+    _customFrameWidth  = frameWidth;
+    _customFrameHeight = frameHeight;
+    notifyListeners();
+  }
+
+  void clearCustomMascot() {
+    _customMascotPath = null;
     notifyListeners();
   }
 }

@@ -1,36 +1,25 @@
 // widgets/writing_area.dart
 //
-// WritingArea — the main editing surface.
+// The writing surface — borderless, seamless with the workspace.
+// No card, no border, no shadow. The text just lives on the background.
 //
-// Normal mode:
-//   Fixed side padding, TextField expands to fill all vertical space.
+// The max-width constraint (800px) and generous padding (64px vertical)
+// remain — they are typography choices, not decoration choices.
 //
-// Focus mode (Apostrophe-style):
-//   • Text column is constrained to kFocusColumnWidth (680 px) and
-//     centred horizontally.
-//   • The TextField is NOT expanded; it grows with content.
-//   • A SingleChildScrollView wraps it so long documents scroll.
-//   • Top padding (kFocusTopPadding) pushes the first line down to a
-//     comfortable eye-level position — roughly 1/3 from the top.
-//   This means you always write near the centre of the screen rather
-//   than at the very top edge.
-//
-// Font and colour:
-//   fontFamily and textColor are passed in from SettingsController so
-//   the editor reflects the user's current preferences immediately.
+// Exposes [controller] via [WritingAreaState] so FormattingBar can
+// read and modify the selection without going through a callback chain.
 
 import 'package:flutter/material.dart';
-
 import '../utils/markdown_highlighter.dart';
 
 typedef OnKeyPress = void Function();
 typedef OnChanged  = void Function(String text);
 
-/// Constrained prose width in focus mode (~68 chars at 16 px monospace).
-const double kFocusColumnWidth = 680;
-
-/// Top padding in focus mode — pushes writing zone to eye-level.
-const double kFocusTopPadding = 180;
+const double kContainerMax   = 800;
+const double kEditorPaddingV = 64;
+const double kEditorPaddingH = 48;
+const double kWorkspacePadH  = 40;
+const double kWorkspacePadV  = 32;
 
 class WritingArea extends StatefulWidget {
   final OnKeyPress onKeyPress;
@@ -38,14 +27,20 @@ class WritingArea extends StatefulWidget {
   final bool       focusMode;
   final String     fontFamily;
   final Color      textColor;
+  final Color      canvasColor;   // kept for background fill (no border now)
+  final Color      borderColor;   // unused visually, kept for API compat
+  final Color      primaryColor;
 
   const WritingArea({
     super.key,
     required this.onKeyPress,
     required this.onChanged,
-    this.focusMode  = false,
-    this.fontFamily = 'monospace',
-    this.textColor  = const Color(0xFFE2E2E2),
+    this.focusMode    = false,
+    this.fontFamily   = 'sans-serif',
+    this.textColor    = const Color(0xFF1B1C1C),
+    this.canvasColor  = const Color(0xFFFFFFFF),
+    this.borderColor  = const Color(0xFFBCC9C6),
+    this.primaryColor = const Color(0xFF006A62),
   });
 
   @override
@@ -54,31 +49,31 @@ class WritingArea extends StatefulWidget {
 
 class WritingAreaState extends State<WritingArea> {
   late _HighlightingController _controller;
-  final FocusNode      _focusNode     = FocusNode();
-  final ScrollController _scrollCtrl  = ScrollController();
+  final FocusNode        _focusNode = FocusNode();
+  final ScrollController _scroll    = ScrollController();
+
+  /// Exposed so FormattingBar can read/write the selection directly.
+  TextEditingController get controller => _controller;
 
   @override
   void initState() {
     super.initState();
     _controller = _HighlightingController(
-      fontFamily: widget.fontFamily,
-      textColor:  widget.textColor,
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _focusNode.requestFocus());
+        fontFamily: widget.fontFamily, textColor: widget.textColor);
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _focusNode.requestFocus());
   }
 
   @override
   void didUpdateWidget(WritingArea old) {
     super.didUpdateWidget(old);
-    // Rebuild the controller when font/colour changes so the style propagates.
-    if (old.fontFamily != widget.fontFamily || old.textColor != widget.textColor) {
+    if (old.fontFamily != widget.fontFamily ||
+        old.textColor  != widget.textColor) {
       final text = _controller.text;
       final sel  = _controller.selection;
       _controller.dispose();
       _controller = _HighlightingController(
-        fontFamily: widget.fontFamily,
-        textColor:  widget.textColor,
-      );
+          fontFamily: widget.fontFamily, textColor: widget.textColor);
       _controller.value = TextEditingValue(text: text, selection: sel);
     }
   }
@@ -87,7 +82,7 @@ class WritingAreaState extends State<WritingArea> {
   void dispose() {
     _controller.dispose();
     _focusNode.dispose();
-    _scrollCtrl.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -99,106 +94,62 @@ class WritingAreaState extends State<WritingArea> {
     _focusNode.requestFocus();
   }
 
-  // ---- Shared text field ----
+  /// Refocus the editor (called by FormattingBar after applying formatting).
+  void refocus() => _focusNode.requestFocus();
 
-  TextStyle get _style => TextStyle(
-    fontSize:   16,
-    height:     1.65,
+  TextStyle get _editorStyle => TextStyle(
+    fontSize:   18,
+    height:     1.8,
     color:      widget.textColor,
     fontFamily: widget.fontFamily,
   );
 
-  // Normal mode: expands to fill all available vertical space.
-  Widget _buildExpandedField() {
-    return TextField(
-      controller: _controller,
-      focusNode:  _focusNode,
-      maxLines:   null,
-      expands:    true,
-      style:      _style,
-      cursorColor: const Color(0xFF7EC8E3),
-      cursorWidth: 2,
-      decoration:  _decoration(),
-      onChanged:   _onChanged,
-    );
-  }
-
-  // Focus mode: grows with content, scrolled by SingleChildScrollView.
-  Widget _buildGrowingField() {
-    return TextField(
-      controller: _controller,
-      focusNode:  _focusNode,
-      maxLines:   null,   // grows with content
-      expands:    false,  // must be false when inside a scroll view
-      style:      _style,
-      cursorColor: const Color(0xFF7EC8E3),
-      cursorWidth: 2,
-      decoration:  _decoration(),
-      onChanged:   _onChanged,
-    );
-  }
-
-  InputDecoration _decoration() => InputDecoration(
-    border:    InputBorder.none,
-    hintText:  '# Start writing…\n\nMarkdown is supported.',
-    hintStyle: TextStyle(
-      color:      widget.textColor.withOpacity(0.25),
-      fontFamily: widget.fontFamily,
-      fontSize:   16,
-      height:     1.65,
+  Widget _buildTextField() => TextField(
+    controller:  _controller,
+    focusNode:   _focusNode,
+    maxLines:    null,
+    expands:     false,
+    style:       _editorStyle,
+    cursorColor: widget.primaryColor,
+    cursorWidth: 2,
+    decoration: InputDecoration(
+      border:    InputBorder.none,
+      hintText:  '# Start writing…',
+      hintStyle: TextStyle(
+        color:      widget.textColor.withOpacity(0.28),
+        fontFamily: widget.fontFamily,
+        fontSize:   18,
+        height:     1.8,
+      ),
     ),
+    onChanged: (text) {
+      widget.onKeyPress();
+      widget.onChanged(text);
+    },
   );
-
-  void _onChanged(String text) {
-    widget.onKeyPress();
-    widget.onChanged(text);
-  }
-
-  // ---- Build ----
 
   @override
   Widget build(BuildContext context) {
+    // Both modes: borderless, scrollable, centred column.
+    // Focus mode removes the workspace padding so the text fills the screen edge.
+    final hPad = widget.focusMode ? kWorkspacePadH : kWorkspacePadH;
+    final vPad = widget.focusMode ? kEditorPaddingV : kWorkspacePadV;
 
-    // ---- Normal mode ----
-    if (!widget.focusMode) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(48, 32, 48, 32),
-        child: _buildExpandedField(),
-      );
-    }
-
-    // ---- Focus mode ----
-    //
-    // Layout:
-    //   SingleChildScrollView          (scrolls the whole document)
-    //   └─ Center                      (centres column horizontally)
-    //      └─ ConstrainedBox (680 px)  (comfortable prose width)
-    //         └─ Padding               (eye-level top offset + bottom space)
-    //            └─ TextField          (grows with content, no expands)
-    //
-    // The top padding pushes the first line of text ~1/3 down the screen
-    // so you're writing in the natural focal zone, not the top-left corner.
-    // As the document grows the user scrolls normally.
-
-    return SingleChildScrollView(
-      controller: _scrollCtrl,
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: kFocusColumnWidth),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(0, kFocusTopPadding, 0, 120),
-            child: _buildGrowingField(),
+    return Container(
+      color: widget.canvasColor, // fill the whole area with theme background
+      child: SingleChildScrollView(
+        controller: _scroll,
+        padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kContainerMax),
+            child: _buildTextField(),
           ),
         ),
       ),
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Syntax-highlighting controller
-// Rebuilds its base style when font/colour changes (via didUpdateWidget above).
-// ---------------------------------------------------------------------------
 
 class _HighlightingController extends TextEditingController {
   final String fontFamily;
@@ -207,8 +158,8 @@ class _HighlightingController extends TextEditingController {
   _HighlightingController({required this.fontFamily, required this.textColor});
 
   TextStyle get _base => TextStyle(
-    fontSize:   16,
-    height:     1.65,
+    fontSize:   18,
+    height:     1.8,
     color:      textColor,
     fontFamily: fontFamily,
   );

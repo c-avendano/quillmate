@@ -11,6 +11,8 @@
 
 import 'dart:io';
 
+import 'package:file_selector/file_selector.dart' as fs;
+
 import 'package:flutter/material.dart';
 
 import '../models/settings_controller.dart';
@@ -76,7 +78,14 @@ class SettingsPanel extends StatelessWidget {
 
                 _Gap(),
 
-                // ---- Target WPM ----
+              // ---- Mascot ----
+              _Label('Mascot'),
+              const SizedBox(height: 10),
+              _MascotPicker(settings: settings),
+
+              _Gap(),
+
+              // ---- Target WPM ----
                 _Label('Target WPM'),
                 const SizedBox(height: 10),
                 _WpmSlider(settings: settings),
@@ -420,4 +429,149 @@ class _WpmSlider extends StatelessWidget {
       ],
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Mascot picker
+// ---------------------------------------------------------------------------
+//
+// Lets the user browse for a PNG sprite sheet on their filesystem.
+// The file path is stored in SettingsController.customMascotPath.
+// Frame count can be adjusted with a simple stepper so any sheet works.
+
+class _MascotPicker extends StatelessWidget {
+  final SettingsController settings;
+  const _MascotPicker({required this.settings});
+
+  Future<void> _browse() async {
+    const typeGroup = fs.XTypeGroup(
+      label: 'PNG sprite sheet',
+      extensions: ['png'],
+    );
+    final file = await fs.openFile(acceptedTypeGroups: [typeGroup]);
+    if (file == null) return;
+    settings.setCustomMascot(
+      path:       file.path,
+      frameCount: settings.customFrameCount,
+      frameWidth: settings.customFrameWidth,
+      frameHeight: settings.customFrameHeight,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasCustom = settings.customMascotPath != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Current status
+        Text(
+          hasCustom
+              ? settings.customMascotPath!.split('/').last
+              : 'Using built-in mascot',
+          style: TextStyle(
+            color:      hasCustom
+                ? const Color(0xFF7EC8E3)
+                : const Color(0x66E2E2E2),
+            fontSize:   11,
+            fontFamily: 'sans-serif',
+            fontStyle:  hasCustom ? FontStyle.normal : FontStyle.italic,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 10),
+
+        // Browse / Reset buttons
+        Row(
+          children: [
+            _OutlineBtn(
+              label:     'Browse…',
+              color:     const Color(0xFF7EC8E3),
+              onPressed: _browse,
+            ),
+            if (hasCustom) ...[
+              const SizedBox(width: 8),
+              _OutlineBtn(
+                label:     'Reset',
+                color:     const Color(0x66E2E2E2),
+                onPressed: settings.clearCustomMascot,
+              ),
+            ],
+          ],
+        ),
+
+        if (hasCustom) ...[
+          const SizedBox(height: 14),
+          // Frame count stepper — lets the user match their sheet layout.
+          Row(
+            children: [
+              const Text('Frames',
+                  style: TextStyle(
+                      color: Color(0xAAE2E2E2),
+                      fontSize: 12,
+                      fontFamily: 'sans-serif')),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.remove, size: 14),
+                color: const Color(0x88E2E2E2),
+                splashRadius: 14,
+                onPressed: settings.customFrameCount > 1
+                    ? () => settings.setCustomMascot(
+                          path:       settings.customMascotPath!,
+                          frameCount: settings.customFrameCount - 1,
+                          frameWidth:  settings.customFrameWidth,
+                          frameHeight: settings.customFrameHeight,
+                        )
+                    : null,
+              ),
+              Text(
+                '${settings.customFrameCount}',
+                style: const TextStyle(
+                  color:      Color(0xFF7EC8E3),
+                  fontSize:   16,
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add, size: 14),
+                color: const Color(0x88E2E2E2),
+                splashRadius: 14,
+                onPressed: () => settings.setCustomMascot(
+                  path:       settings.customMascotPath!,
+                  frameCount: settings.customFrameCount + 1,
+                  frameWidth:  settings.customFrameWidth,
+                  frameHeight: settings.customFrameHeight,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _OutlineBtn extends StatelessWidget {
+  final String       label;
+  final Color        color;
+  final VoidCallback onPressed;
+  const _OutlineBtn({required this.label, required this.color, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton(
+    style: OutlinedButton.styleFrom(
+      foregroundColor: color,
+      side:            BorderSide(color: color.withOpacity(0.5)),
+      padding:         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      minimumSize:     Size.zero,
+      tapTargetSize:   MaterialTapTargetSize.shrinkWrap,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+    ),
+    onPressed: onPressed,
+    child: Text(label,
+        style: const TextStyle(fontSize: 12, fontFamily: 'sans-serif')),
+  );
 }
