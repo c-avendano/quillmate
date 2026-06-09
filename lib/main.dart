@@ -1,7 +1,7 @@
-// main.dart — QuillMate entry point.
+// main.dart
 //
-// Initialises window_manager before runApp so focus mode can hide the
-// OS title bar (window decorations) on Linux/GTK.
+// Initialises window_manager with a hidden title bar so the app header
+// integrates the window controls directly (Apostrophe-style unified bar).
 
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
@@ -11,10 +11,20 @@ import 'widgets/writing_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // window_manager must be initialised before the window is shown.
-  // We set a sensible minimum size so the editor is never unusable.
   await windowManager.ensureInitialized();
-  await windowManager.setMinimumSize(const Size(600, 400));
+
+  // Hide the native OS title bar so our _TopBar becomes the only chrome.
+  // DragToMoveArea in _TopBar lets the user still drag the window.
+  await windowManager.waitUntilReadyToShow(
+    const WindowOptions(
+      minimumSize: Size(640, 480),
+      titleBarStyle: TitleBarStyle.hidden,  // removes native title bar
+    ),
+    () async {
+      await windowManager.show();
+      await windowManager.focus();
+    },
+  );
 
   runApp(const QuillMateApp());
 }
@@ -29,8 +39,8 @@ class QuillMateApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF4A90D9),
-          brightness: Brightness.dark,
+          seedColor: const Color(0xFF006A62),
+          brightness: Brightness.light,
         ),
         useMaterial3: true,
       ),

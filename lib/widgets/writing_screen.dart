@@ -2,24 +2,16 @@
 //
 // Layout (normal mode):
 //
-//   ┌─ TopBar (44px) ──────────────────────────────────────────────┐
-//   │  [+][Open][Save]       filename ●       [Focus][Settings]    │
-//   ├─ FormattingBar (38px) ────────────────────────────────────────┤
-//   │  Bold  Italic  Strike  Code  Link  Quote  H1  H2  H3  •  1. │
+//   ┌─ TopBar (44px, DragToMoveArea) ──────────────────────────────┐
+//   │  [+][Open][Save▾]     filename ●     [Focus][⊞][Settings]   │
+//   ├─ FormattingBar (animated, collapsible) ───────────────────────┤
+//   │  Bold Italic Strike Code Link Quote H1 H2 H3 • 1.   [^] │
 //   ├───────────────────────────────────────────────────────────────┤
-//   │                                                               │
-//   │   workspace (canvasColor fills edge-to-edge)                  │
-//   │                                                               │
-//   │        # Heading                                              │
-//   │        Body text at 18px / 1.8 line-height…                  │
-//   │        (constrained to 800px, centred)                        │
-//   │                                                               │
-//   │                                         [mascot]  ←draggable │
+//   │  editor (800px centred, seamless background)                  │
+//   │                                          [mascot] draggable   │
 //   ├─ BottomBar (36px) ────────────────────────────────────────────┤
-//   │  124 words                            32/40 wpm ✍️            │
+//   │  124 words                          32/40 wpm ✍️              │
 //   └───────────────────────────────────────────────────────────────┘
-//
-// Focus mode: fullscreen (window_manager), only the editor + mascot visible.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -48,10 +40,12 @@ class _WritingScreenState extends State<WritingScreen> {
   final GlobalKey<WritingAreaState> _editorKey   = GlobalKey<WritingAreaState>();
   final GlobalKey<ScaffoldState>    _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Mascot: starts null (placed bottom-right on first layout), draggable.
   Offset? _mascotPos;
   static const double _mascotRightPad  = 24;
   static const double _mascotBottomPad = 16;
+
+  // Formatting bar visibility (persists for the session, starts visible).
+  bool _fmtBarVisible = true;
 
   @override
   void initState() {
@@ -60,6 +54,11 @@ class _WritingScreenState extends State<WritingScreen> {
     _activity.addListener(_rebuild);
     _files.addListener(_onFileChanged);
     _settings.addListener(_rebuild);
+
+    // Show WPM onboarding dialog after first frame if not yet set.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_settings.hasSetWpm) _showWpmOnboarding();
+    });
   }
 
   void _rebuild() => setState(() {});
@@ -82,15 +81,21 @@ class _WritingScreenState extends State<WritingScreen> {
 
   bool get _focus => _settings.focusMode;
 
+  // ---- Focus toggle ----
+
   Future<void> _toggleFocus() async {
     final next = !_settings.focusMode;
     _settings.setFocusMode(next);
     await windowManager.setFullScreen(next);
   }
 
+  // ---- File handlers ----
+
   Future<void> _handleNew()  async => _files.newFile(onConfirm: _confirmDiscard);
   Future<void> _handleOpen() async => _files.openFile(context);
   Future<void> _handleSave() async => _files.saveFile(context);
+  Future<void> _handleExportHtml() async => _files.exportAsHtml(context);
+  Future<void> _handleExportPdf()  async => _files.exportAsPdf(context);
 
   Future<bool> _confirmDiscard() async {
     final ok = await showDialog<bool>(
@@ -99,29 +104,128 @@ class _WritingScreenState extends State<WritingScreen> {
         backgroundColor: _settings.canvasColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         title: Text('Unsaved changes',
-            style: TextStyle(color: _settings.textColor,
-                fontSize: 16, fontWeight: FontWeight.w600,
-                fontFamily: 'sans-serif')),
+            style: TextStyle(color: _settings.textColor, fontSize: 16,
+                fontWeight: FontWeight.w600, fontFamily: 'sans-serif')),
         content: Text('Discard unsaved changes?',
             style: TextStyle(color: _settings.chromeTextColor,
                 fontSize: 14, fontFamily: 'sans-serif')),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel',
-                style: TextStyle(color: _settings.chromeTextColor)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Discard',
-                style: TextStyle(color: _settings.primaryColor,
-                    fontWeight: FontWeight.w600)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: Text('Cancel',
+                  style: TextStyle(color: _settings.chromeTextColor))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Discard',
+                  style: TextStyle(color: _settings.primaryColor,
+                      fontWeight: FontWeight.w600))),
         ],
       ),
     );
     return ok ?? false;
   }
+
+  // ---- WPM onboarding ----
+
+  Future<void> _showWpmOnboarding() async {
+    final s = _settings;
+    int draft = s.targetWpm;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          backgroundColor: s.canvasColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          title: Text('Welcome to QuillMate ✨',
+              style: TextStyle(color: s.textColor, fontSize: 17,
+                  fontWeight: FontWeight.w700, fontFamily: 'sans-serif')),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'What\'s your typical writing speed?\n'
+                  'The mascot uses this to cheer you on.',
+                  style: TextStyle(color: s.chromeTextColor, fontSize: 14,
+                      fontFamily: 'sans-serif', height: 1.5),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Text('$draft wpm',
+                        style: TextStyle(color: s.primaryColor, fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace')),
+                    const Spacer(),
+                    Text(_wpmLabel(draft),
+                        style: TextStyle(color: s.chromeTextColor,
+                            fontSize: 12, fontFamily: 'sans-serif')),
+                  ],
+                ),
+                SliderTheme(
+                  data: SliderTheme.of(ctx).copyWith(
+                    activeTrackColor:   s.primaryColor,
+                    inactiveTrackColor: s.borderColor,
+                    thumbColor:         s.primaryColor,
+                    trackHeight:        3,
+                  ),
+                  child: Slider(
+                    value:     draft.toDouble(),
+                    min:       kMinTargetWpm.toDouble(),
+                    max:       kMaxTargetWpm.toDouble(),
+                    divisions: kMaxTargetWpm - kMinTargetWpm,
+                    onChanged: (v) => setLocal(() => draft = v.round()),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('$kMinTargetWpm slow',
+                          style: TextStyle(color: s.chromeTextColor.withOpacity(0.4),
+                              fontSize: 10, fontFamily: 'sans-serif')),
+                      Text('$kMaxTargetWpm fast',
+                          style: TextStyle(color: s.chromeTextColor.withOpacity(0.4),
+                              fontSize: 10, fontFamily: 'sans-serif')),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text('You can change this anytime in Settings.',
+                    style: TextStyle(color: s.chromeTextColor.withOpacity(0.5),
+                        fontSize: 11, fontFamily: 'sans-serif')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                s.setTargetWpm(draft);
+                s.markWpmSet();
+                Navigator.pop(ctx);
+              },
+              child: Text('Start writing',
+                  style: TextStyle(color: s.primaryColor,
+                      fontWeight: FontWeight.w700, fontFamily: 'sans-serif')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _wpmLabel(int wpm) {
+    if (wpm < 30) return 'Relaxed';
+    if (wpm < 50) return 'Comfortable';
+    if (wpm < 70) return 'Steady';
+    if (wpm < 90) return 'Brisk';
+    return 'Fast';
+  }
+
+  // ---- Mascot bubble ----
 
   String get _bubble => switch (_activity.mascotState) {
         MascotState.encouraging => _activity.encouragementMessage,
@@ -134,19 +238,21 @@ class _WritingScreenState extends State<WritingScreen> {
     return t.isEmpty ? 0 : t.split(RegExp(r'\s+')).length;
   }
 
+  // Heights used for mascot clamping — must match widget heights below.
+  static const _topBarH    = 44.0;
+  static const _fmtBarH    = 38.0;
+  static const _bottomBarH = 36.0;
+
   @override
   Widget build(BuildContext context) {
     final s    = _settings;
     final size = MediaQuery.of(context).size;
 
-    // Chrome heights — must match the actual widget heights below.
-    const topBarH      = 44.0;
-    const fmtBarH      = 38.0;
-    const bottomBarH   = 36.0;
-    final chromeH = _focus ? 0.0 : topBarH + fmtBarH + bottomBarH;
-
-    // Initialise mascot to bottom-right of the editor area (not the full window).
+    final chromeH = _focus
+        ? 0.0
+        : _topBarH + (_fmtBarVisible ? _fmtBarH : 0) + _bottomBarH;
     final stackH = size.height - chromeH;
+
     _mascotPos ??= Offset(
       size.width - kMascotSize - _mascotRightPad,
       stackH     - kMascotSize - _mascotBottomPad,
@@ -154,7 +260,7 @@ class _WritingScreenState extends State<WritingScreen> {
 
     return Scaffold(
       key:             _scaffoldKey,
-      backgroundColor: s.canvasColor,  // seamless fill
+      backgroundColor: s.canvasColor,
       endDrawer:       SettingsPanel(settings: s),
       body: CallbackShortcuts(
         bindings: {
@@ -168,39 +274,49 @@ class _WritingScreenState extends State<WritingScreen> {
           child: Column(
             children: [
 
-              // ── Top bar ──────────────────────────────────────────
+              // ── Top bar (drag area for window movement) ──────────
               if (!_focus)
-                _TopBar(
-                  filename:   _files.displayName,
-                  unsaved:    _files.hasUnsavedChanges,
-                  s:          s,
-                  onNew:      _handleNew,
-                  onOpen:     _handleOpen,
-                  onSave:     _handleSave,
-                  onFocus:    _toggleFocus,
-                  onSettings: () => _scaffoldKey.currentState?.openEndDrawer(),
+                DragToMoveArea(
+                  child: _TopBar(
+                    filename:      _files.displayName,
+                    unsaved:       _files.hasUnsavedChanges,
+                    s:             s,
+                    onNew:         _handleNew,
+                    onOpen:        _handleOpen,
+                    onSave:        _handleSave,
+                    onExportHtml:  _handleExportHtml,
+                    onExportPdf:   _handleExportPdf,
+                    onFocus:       _toggleFocus,
+                    onSettings:    () => _scaffoldKey.currentState?.openEndDrawer(),
+                  ),
                 ),
 
-              // ── Formatting bar ───────────────────────────────────
-              // Hidden in focus mode.
-              // The controller is read from the editor's GlobalKey state.
-              // It is always non-null by the time this runs because WritingArea
-              // is built in the same pass (same build() call, earlier in Column).
+              // ── Formatting bar (animated collapse) ───────────────
               if (!_focus)
-                _FormattingBarSlot(
-                  editorKey: _editorKey,
-                  settings:  s,
-                  onChanged: () {
-                    _activity.recordKeyPress();
-                    _editorKey.currentState?.refocus();
-                  },
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve:    Curves.easeInOut,
+                  child: _fmtBarVisible
+                      ? _FormattingBarSlot(
+                          editorKey: _editorKey,
+                          settings:  s,
+                          visible:   _fmtBarVisible,
+                          onToggle:  () => setState(() => _fmtBarVisible = false),
+                          onChanged: () {
+                            _activity.recordKeyPress();
+                            _editorKey.currentState?.refocus();
+                          },
+                        )
+                      : _CollapsedFmtBar(
+                          s:        s,
+                          onExpand: () => setState(() => _fmtBarVisible = true),
+                        ),
                 ),
 
               // ── Editor + mascot ──────────────────────────────────
               Expanded(
                 child: Stack(
                   children: [
-                    // The editor fills the entire Stack area.
                     WritingArea(
                       key:          _editorKey,
                       focusMode:    _focus,
@@ -213,8 +329,7 @@ class _WritingScreenState extends State<WritingScreen> {
                       onChanged:    _files.onContentChanged,
                     ),
 
-                    // Mascot: starts bottom-right, draggable anywhere.
-                    // MediaQuery gives us the real window size so clamping works.
+                    // Mascot: bottom-right default, fully draggable.
                     Positioned(
                       left: _mascotPos!.dx,
                       top:  _mascotPos!.dy,
@@ -223,9 +338,9 @@ class _WritingScreenState extends State<WritingScreen> {
                           setState(() {
                             _mascotPos = Offset(
                               (_mascotPos!.dx + d.delta.dx)
-                                  .clamp(0, size.width  - kMascotSize),
+                                  .clamp(0, size.width - kMascotSize),
                               (_mascotPos!.dy + d.delta.dy)
-                                  .clamp(0, stackH      - kMascotSize),
+                                  .clamp(0, stackH     - kMascotSize),
                             );
                           });
                         },
@@ -237,7 +352,6 @@ class _WritingScreenState extends State<WritingScreen> {
                       ),
                     ),
 
-                    // Focus mode exit hint.
                     if (_focus)
                       Positioned(
                         bottom: 16, left: 0, right: 0,
@@ -287,6 +401,8 @@ class _TopBar extends StatelessWidget {
   final VoidCallback       onNew;
   final VoidCallback       onOpen;
   final VoidCallback       onSave;
+  final VoidCallback       onExportHtml;
+  final VoidCallback       onExportPdf;
   final VoidCallback       onFocus;
   final VoidCallback       onSettings;
 
@@ -297,6 +413,8 @@ class _TopBar extends StatelessWidget {
     required this.onNew,
     required this.onOpen,
     required this.onSave,
+    required this.onExportHtml,
+    required this.onExportPdf,
     required this.onFocus,
     required this.onSettings,
   });
@@ -306,15 +424,19 @@ class _TopBar extends StatelessWidget {
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: s.chromeColor,
+        color:  s.chromeColor,
         border: Border(bottom: BorderSide(color: s.borderColor, width: 1)),
       ),
       child: Row(
         children: [
           const SizedBox(width: 4),
-          _TBtn(Icons.add,               'New',             s, onNew),
-          _TBtn(Icons.folder_open_outlined, 'Open',         s, onOpen),
-          _TBtn(Icons.save_outlined,     'Save  (Ctrl+S)',  s, onSave),
+          _TBtn(Icons.add,                  'New',            s, onNew),
+          _TBtn(Icons.folder_open_outlined, 'Open',           s, onOpen),
+          _TBtn(Icons.save_outlined,        'Save (Ctrl+S)',  s, onSave),
+
+          // Export dropdown
+          _ExportMenu(s: s, onHtml: onExportHtml, onPdf: onExportPdf),
+
           Expanded(
             child: Center(
               child: Text(
@@ -329,10 +451,143 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           _TBtn(Icons.center_focus_strong_outlined,
-              'Focus mode  (Ctrl+Shift+F)', s, onFocus),
+              'Focus mode (Ctrl+Shift+F)', s, onFocus),
           _TBtn(Icons.tune, 'Settings', s, onSettings),
           const SizedBox(width: 4),
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Export dropdown menu
+// ---------------------------------------------------------------------------
+
+class _ExportMenu extends StatelessWidget {
+  final SettingsController s;
+  final VoidCallback       onHtml;
+  final VoidCallback       onPdf;
+  const _ExportMenu({required this.s, required this.onHtml, required this.onPdf});
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip:  'Export',
+      color:    s.canvasColor,
+      shape:    RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  side: BorderSide(color: s.borderColor)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.upload_outlined, size: 17, color: s.chromeTextColor),
+            const SizedBox(width: 2),
+            Icon(Icons.arrow_drop_down, size: 14, color: s.chromeTextColor),
+          ],
+        ),
+      ),
+      onSelected: (v) {
+        if (v == 'html') onHtml();
+        if (v == 'pdf')  onPdf();
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(value: 'html',
+            child: Text('Export as HTML',
+                style: TextStyle(color: s.textColor, fontSize: 13,
+                    fontFamily: 'sans-serif'))),
+        PopupMenuItem(value: 'pdf',
+            child: Text('Export as PDF',
+                style: TextStyle(color: s.textColor, fontSize: 13,
+                    fontFamily: 'sans-serif'))),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Formatting bar slot + collapsed strip
+// ---------------------------------------------------------------------------
+
+class _FormattingBarSlot extends StatefulWidget {
+  final GlobalKey<WritingAreaState> editorKey;
+  final SettingsController          settings;
+  final bool                        visible;
+  final VoidCallback                onToggle;
+  final VoidCallback                onChanged;
+
+  const _FormattingBarSlot({
+    required this.editorKey,
+    required this.settings,
+    required this.visible,
+    required this.onToggle,
+    required this.onChanged,
+  });
+
+  @override
+  State<_FormattingBarSlot> createState() => _FormattingBarSlotState();
+}
+
+class _FormattingBarSlotState extends State<_FormattingBarSlot> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ctrl = widget.editorKey.currentState?.controller;
+    if (ctrl == null) return SizedBox(height: 38, child: Container(color: widget.settings.canvasColor));
+    return FormattingBar(
+      controller:  ctrl,
+      settings:    widget.settings,
+      onChanged:   widget.onChanged,
+      onCollapse:  widget.onToggle,
+    );
+  }
+}
+
+/// Tiny strip shown when the formatting bar is collapsed.
+class _CollapsedFmtBar extends StatelessWidget {
+  final SettingsController s;
+  final VoidCallback       onExpand;
+  const _CollapsedFmtBar({required this.s, required this.onExpand});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 22,
+      decoration: BoxDecoration(
+        color:  s.canvasColor,
+        border: Border(bottom: BorderSide(color: s.borderColor, width: 1)),
+      ),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: GestureDetector(
+          onTap: onExpand,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Formatting',
+                    style: TextStyle(
+                      color:      s.chromeTextColor.withOpacity(0.5),
+                      fontSize:   10,
+                      fontFamily: 'sans-serif',
+                    )),
+                const SizedBox(width: 4),
+                Icon(Icons.keyboard_arrow_down,
+                    size: 14, color: s.chromeTextColor.withOpacity(0.5)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -383,18 +638,13 @@ class _BottomBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          Text(
-            '$wordCount ${wordCount == 1 ? "word" : "words"}',
-            style: TextStyle(
-                color: s.chromeTextColor, fontSize: 12,
-                fontFamily: 'sans-serif'),
-          ),
+          Text('$wordCount ${wordCount == 1 ? "word" : "words"}',
+              style: TextStyle(color: s.chromeTextColor,
+                  fontSize: 12, fontFamily: 'sans-serif')),
           const Spacer(),
-          Text(
-            '$currentWpm / $targetWpm wpm  $_mood',
-            style: TextStyle(
-                color: _wpmColor, fontSize: 12, fontFamily: 'monospace'),
-          ),
+          Text('$currentWpm / $targetWpm wpm  $_mood',
+              style: TextStyle(color: _wpmColor,
+                  fontSize: 12, fontFamily: 'monospace')),
         ],
       ),
     );
@@ -423,48 +673,4 @@ class _TBtn extends StatelessWidget {
           onPressed:    onPressed,
         ),
       );
-}
-
-// ---------------------------------------------------------------------------
-// Formatting bar slot
-// ---------------------------------------------------------------------------
-//
-// Reads the editor controller from the GlobalKey after the first frame.
-// Uses a post-frame callback to trigger a rebuild once the key is resolved.
-
-class _FormattingBarSlot extends StatefulWidget {
-  final GlobalKey<WritingAreaState> editorKey;
-  final SettingsController          settings;
-  final VoidCallback                onChanged;
-
-  const _FormattingBarSlot({
-    required this.editorKey,
-    required this.settings,
-    required this.onChanged,
-  });
-
-  @override
-  State<_FormattingBarSlot> createState() => _FormattingBarSlotState();
-}
-
-class _FormattingBarSlotState extends State<_FormattingBarSlot> {
-  @override
-  void initState() {
-    super.initState();
-    // Trigger a rebuild after the first frame so the GlobalKey state is ready.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ctrl = widget.editorKey.currentState?.controller;
-    if (ctrl == null) return const SizedBox(height: 38);
-    return FormattingBar(
-      controller: ctrl,
-      settings:   widget.settings,
-      onChanged:  widget.onChanged,
-    );
-  }
 }

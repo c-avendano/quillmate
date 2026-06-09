@@ -1,18 +1,12 @@
 // widgets/settings_panel.dart
 //
-// Settings drawer — slides in from the right.
-// Reads and writes only SettingsController.
-//
-// Sections:
-//   • Background (White / Black / Sepia radio buttons)
-//   • Font (system font dropdown)
-//   • Focus mode toggle
-//   • Target WPM slider
+// Settings drawer — fully theme-aware.
+// Every colour comes from SettingsController so it adapts to Light/Sepia/Dark.
+// No hardcoded colours anywhere in this file.
 
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart' as fs;
-
 import 'package:flutter/material.dart';
 
 import '../models/settings_controller.dart';
@@ -23,125 +17,148 @@ class SettingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Drawer(
-      backgroundColor: const Color(0xFF1E1E3A),
-      width: 300,
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: ListenableBuilder(
-            listenable: settings,
-            builder: (context, _) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return ListenableBuilder(
+      listenable: settings,
+      builder: (context, _) {
+        final s = settings;
+        return Drawer(
+          backgroundColor: s.canvasColor,
+          width: 300,
+          child: SafeArea(
+            child: Column(
               children: [
-
-                // ---- Header ----
-                Row(
-                  children: [
-                    const Icon(Icons.tune, color: Color(0xFF7EC8E3), size: 18),
-                    const SizedBox(width: 8),
-                    const Text('Settings',
-                        style: TextStyle(
-                          color: Color(0xFF7EC8E3),
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.1,
-                        )),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 16),
-                      color: const Color(0x66E2E2E2),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
+                // Header
+                Container(
+                  height: 52,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: s.chromeColor,
+                    border: Border(
+                        bottom: BorderSide(color: s.borderColor, width: 1)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.tune, color: s.primaryColor, size: 16),
+                      const SizedBox(width: 8),
+                      Text('Settings',
+                          style: TextStyle(
+                            color:      s.textColor,
+                            fontSize:   14,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'sans-serif',
+                          )),
+                      const Spacer(),
+                      IconButton(
+                        icon: Icon(Icons.close, size: 16, color: s.chromeTextColor),
+                        onPressed: () => Navigator.of(context).pop(),
+                        splashRadius: 14,
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 28),
 
-                // ---- Background ----
-                _Label('Background'),
-                const SizedBox(height: 10),
-                _ThemeRadios(settings: settings),
+                // Scrollable content
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _SLabel('Theme', s),
+                        const SizedBox(height: 10),
+                        _ThemeRadios(settings: s),
 
-                _Gap(),
+                        _SDivider(s),
 
-                // ---- Font ----
-                _Label('Font'),
-                const SizedBox(height: 10),
-                _FontDropdown(settings: settings),
+                        _SLabel('Font', s),
+                        const SizedBox(height: 10),
+                        _FontDropdown(settings: s),
 
-                _Gap(),
+                        _SDivider(s),
 
-                // ---- Focus mode ----
-                _Label('Editor'),
-                const SizedBox(height: 10),
-                _FocusRow(settings: settings),
+                        _SLabel('Editor', s),
+                        const SizedBox(height: 10),
+                        _FocusRow(settings: s),
 
-                _Gap(),
+                        _SDivider(s),
 
-              // ---- Mascot ----
-              _Label('Mascot'),
-              const SizedBox(height: 10),
-              _MascotPicker(settings: settings),
+                        _SLabel('Mascot', s),
+                        const SizedBox(height: 10),
+                        _MascotPicker(settings: s),
 
-              _Gap(),
+                        _SDivider(s),
 
-              // ---- Target WPM ----
-                _Label('Target WPM'),
-                const SizedBox(height: 10),
-                _WpmSlider(settings: settings),
+                        _SLabel('Target WPM', s),
+                        const SizedBox(height: 10),
+                        _WpmSlider(settings: s),
 
-                const Spacer(),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+                ),
 
-                const Text(
-                  'Speed measured over 60 s.  1 word = 5 chars.',
-                  style: TextStyle(
-                      color: Color(0x33E2E2E2), fontSize: 10, height: 1.6),
+                // Footer
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border:
+                        Border(top: BorderSide(color: s.borderColor, width: 1)),
+                  ),
+                  child: Text(
+                    'Speed: 10 s rolling window  ·  1 word = 5 chars',
+                    style: TextStyle(
+                      color:      s.chromeTextColor.withOpacity(0.5),
+                      fontSize:   10,
+                      fontFamily: 'sans-serif',
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Layout helpers
+// Shared helpers
 // ---------------------------------------------------------------------------
 
-class _Label extends StatelessWidget {
-  final String text;
-  const _Label(this.text);
+class _SLabel extends StatelessWidget {
+  final String             text;
+  final SettingsController s;
+  const _SLabel(this.text, this.s);
+
   @override
   Widget build(BuildContext context) => Text(
-        text,
-        style: const TextStyle(
-          color: Color(0x88E2E2E2),
-          fontSize: 10,
+        text.toUpperCase(),
+        style: TextStyle(
+          color:       s.chromeTextColor.withOpacity(0.6),
+          fontSize:    10,
           letterSpacing: 1.2,
-          fontWeight: FontWeight.w600,
+          fontWeight:  FontWeight.w600,
+          fontFamily:  'sans-serif',
         ),
       );
 }
 
-class _Gap extends StatelessWidget {
+class _SDivider extends StatelessWidget {
+  final SettingsController s;
+  const _SDivider(this.s);
+
   @override
-  Widget build(BuildContext context) => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Divider(color: Color(0x22FFFFFF), height: 1),
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Divider(color: s.borderColor, height: 1),
       );
 }
 
 // ---------------------------------------------------------------------------
-// Background — three radio buttons (White / Black / Sepia)
+// Theme radios
 // ---------------------------------------------------------------------------
-//
-// Each button shows a colour swatch + label.
-// The selected one gets a blue border; others are dimmed.
-//
-// To add a preset, add an entry to kEditorThemes in settings_controller.dart.
-// This widget requires no changes.
 
 class _ThemeRadios extends StatelessWidget {
   final SettingsController settings;
@@ -160,31 +177,28 @@ class _ThemeRadios extends StatelessWidget {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
-                color: preset.background,
-                borderRadius: BorderRadius.circular(8),
+                color: preset.canvas,
+                borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: selected
-                      ? const Color(0xFF7EC8E3)
-                      : const Color(0x33FFFFFF),
-                  width: selected ? 2 : 1,
+                  color:  selected ? settings.primaryColor : settings.borderColor,
+                  width:  selected ? 2 : 1,
                 ),
               ),
               child: Column(
                 children: [
-                  // Aa preview in the preset's own text colour.
                   Text('Aa',
                       style: TextStyle(
-                        color: preset.text,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      )),
+                          color:      preset.text,
+                          fontSize:   14,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'sans-serif')),
                   const SizedBox(height: 4),
                   Text(preset.label,
                       style: TextStyle(
-                        color: preset.text.withOpacity(0.6),
-                        fontSize: 9,
-                        letterSpacing: 0.8,
-                      )),
+                          color:      preset.text.withOpacity(0.6),
+                          fontSize:   9,
+                          letterSpacing: 0.6,
+                          fontFamily: 'sans-serif')),
                 ],
               ),
             ),
@@ -196,13 +210,8 @@ class _ThemeRadios extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Font — system font dropdown
+// Font dropdown
 // ---------------------------------------------------------------------------
-//
-// Flutter exposes the fonts loaded by the engine via
-// PlatformDispatcher.instance.fonts (available since Flutter 3.10).
-// We read those names, sort them, and present them in a DropdownButton.
-// Fallback: a small curated list if the API returns nothing.
 
 class _FontDropdown extends StatefulWidget {
   final SettingsController settings;
@@ -219,19 +228,11 @@ class _FontDropdownState extends State<_FontDropdown> {
   void initState() {
     super.initState();
     _fonts = _loadFonts();
-    // Ensure the current selection is always in the list.
     if (!_fonts.contains(widget.settings.fontFamily)) {
       _fonts = [widget.settings.fontFamily, ..._fonts];
     }
   }
 
-  // Scans standard Linux font directories and extracts family names from
-  // filenames. This is a fast, dependency-free approach that works on any
-  // Flutter version and reflects fonts the user has actually installed.
-  //
-  // It reads font file names and strips extensions/variants to produce a
-  // clean list. It is not perfect (font files don't always match the
-  // internal family name), but it gives a useful, real list to pick from.
   List<String> _loadFonts() {
     final dirs = [
       '/usr/share/fonts',
@@ -239,9 +240,7 @@ class _FontDropdownState extends State<_FontDropdown> {
       '${Platform.environment['HOME']}/.fonts',
       '${Platform.environment['HOME']}/.local/share/fonts',
     ];
-
     final families = <String>{};
-
     for (final dirPath in dirs) {
       try {
         final dir = Directory(dirPath);
@@ -249,74 +248,50 @@ class _FontDropdownState extends State<_FontDropdown> {
         for (final entity in dir.listSync(recursive: true)) {
           if (entity is! File) continue;
           final name = entity.uri.pathSegments.last.toLowerCase();
-          if (!name.endsWith('.ttf') &&
-              !name.endsWith('.otf') &&
-              !name.endsWith('.woff') &&
-              !name.endsWith('.woff2')) continue;
-          // Strip extension and common weight/style suffixes to get a
-          // rough family name. E.g. "RobotoCondensed-Bold.ttf" → "Roboto Condensed"
-          var family = entity.uri.pathSegments.last;
-          family = family.replaceAll(RegExp(r'\.(ttf|otf|woff2?)$',
-              caseSensitive: false), '');
-          family = family.replaceAll(
-              RegExp(r'[-_](Bold|Italic|Light|Regular|Medium|Thin|'
-                  r'Black|ExtraLight|SemiBold|ExtraBold|Heavy|'
-                  r'Condensed|Expanded|BoldItalic|LightItalic|'
-                  r'MediumItalic|SemiBoldItalic|Oblique)$',
-                  caseSensitive: false),
-              '');
-          family = family.replaceAll('-', ' ').replaceAll('_', ' ').trim();
+          if (!name.endsWith('.ttf') && !name.endsWith('.otf')) continue;
+          var family = entity.uri.pathSegments.last
+              .replaceAll(RegExp(r'\.(ttf|otf)$', caseSensitive: false), '')
+              .replaceAll(
+                  RegExp(
+                      r'[-_](Bold|Italic|Light|Regular|Medium|Thin|Black|'
+                      r'ExtraLight|SemiBold|ExtraBold|Heavy|Condensed|Oblique)$',
+                      caseSensitive: false),
+                  '')
+              .replaceAll('-', ' ')
+              .replaceAll('_', ' ')
+              .trim();
           if (family.isNotEmpty) families.add(family);
         }
-      } catch (_) {
-        // Skip unreadable directories silently.
-      }
+      } catch (_) {}
     }
-
-    if (families.isEmpty) {
-      // Fallback: generic CSS family names that Flutter resolves on all platforms.
-      return ['sans-serif', 'serif', 'monospace'];
-    }
-
+    if (families.isEmpty) return ['sans-serif', 'serif', 'monospace'];
     return families.toList()..sort();
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = widget.settings;
     return DropdownButton<String>(
-      value: _fonts.contains(widget.settings.fontFamily)
-          ? widget.settings.fontFamily
-          : _fonts.first,
-      isExpanded: true,         // fills the drawer width — no overflow
-      dropdownColor: const Color(0xFF1E1E3A),
-      style: const TextStyle(color: Color(0xCCE2E2E2), fontSize: 13),
-      iconEnabledColor: const Color(0x66E2E2E2),
-      underline: Container(height: 1, color: const Color(0x33FFFFFF)),
-      onChanged: (v) {
-        if (v != null) widget.settings.setFontFamily(v);
-      },
-      // Show the selected font rendered in itself.
-      selectedItemBuilder: (context) => _fonts
+      value:           _fonts.contains(s.fontFamily) ? s.fontFamily : _fonts.first,
+      isExpanded:      true,
+      dropdownColor:   s.canvasColor,
+      style:           TextStyle(color: s.textColor, fontSize: 13, fontFamily: 'sans-serif'),
+      iconEnabledColor: s.chromeTextColor,
+      underline:       Container(height: 1, color: s.borderColor),
+      onChanged:       (v) { if (v != null) s.setFontFamily(v); },
+      selectedItemBuilder: (ctx) => _fonts
           .map((f) => Align(
                 alignment: Alignment.centerLeft,
                 child: Text(f,
                     style: TextStyle(
-                      fontFamily: f,
-                      color: const Color(0xCCE2E2E2),
-                      fontSize: 13,
-                    )),
-              ))
+                        fontFamily: f, color: s.textColor, fontSize: 13))))
           .toList(),
       items: _fonts
           .map((f) => DropdownMenuItem(
                 value: f,
                 child: Text(f,
                     style: TextStyle(
-                      fontFamily: f,
-                      color: const Color(0xCCE2E2E2),
-                      fontSize: 13,
-                    )),
-              ))
+                        fontFamily: f, color: s.textColor, fontSize: 13))))
           .toList(),
     );
   }
@@ -332,31 +307,33 @@ class _FocusRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = settings;
     return Row(
       children: [
-        const Icon(Icons.center_focus_strong_outlined,
-            color: Color(0xAAE2E2E2), size: 16),
+        Icon(Icons.center_focus_strong_outlined,
+            color: s.chromeTextColor, size: 16),
         const SizedBox(width: 10),
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Focus mode',
                   style: TextStyle(
-                      color: Color(0xCCE2E2E2),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600)),
-              SizedBox(height: 2),
+                      color: s.textColor, fontSize: 13,
+                      fontWeight: FontWeight.w600, fontFamily: 'sans-serif')),
+              const SizedBox(height: 2),
               Text('Ctrl+Shift+F',
-                  style: TextStyle(color: Color(0x44E2E2E2), fontSize: 10)),
+                  style: TextStyle(
+                      color: s.chromeTextColor.withOpacity(0.5),
+                      fontSize: 10, fontFamily: 'sans-serif')),
             ],
           ),
         ),
         Switch(
-          value:              settings.focusMode,
-          onChanged:          settings.setFocusMode,
-          activeColor:        const Color(0xFF7EC8E3),
-          inactiveTrackColor: const Color(0x33E2E2E2),
+          value:              s.focusMode,
+          onChanged:          s.setFocusMode,
+          activeColor:        s.primaryColor,
+          inactiveTrackColor: s.borderColor,
         ),
       ],
     );
@@ -364,187 +341,154 @@ class _FocusRow extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Target WPM slider
+// Mascot picker with sprite sheet guide
 // ---------------------------------------------------------------------------
-
-class _WpmSlider extends StatelessWidget {
-  final SettingsController settings;
-  const _WpmSlider({required this.settings});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Text('Target',
-                style: TextStyle(
-                    color: Color(0xCCE2E2E2),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600)),
-            const Spacer(),
-            Text('${settings.targetWpm}',
-                style: const TextStyle(
-                  color: Color(0xFF7EC8E3),
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
-                )),
-            const Text(' wpm',
-                style: TextStyle(color: Color(0x66E2E2E2), fontSize: 11)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            activeTrackColor:   const Color(0xFF4A90D9),
-            inactiveTrackColor: const Color(0x33E2E2E2),
-            thumbColor:         const Color(0xFF7EC8E3),
-            overlayColor:       const Color(0x224A90D9),
-            trackHeight:        3,
-          ),
-          child: Slider(
-            value:     settings.targetWpm.toDouble(),
-            min:       kMinTargetWpm.toDouble(),
-            max:       kMaxTargetWpm.toDouble(),
-            divisions: kMaxTargetWpm - kMinTargetWpm,
-            onChanged: (v) => settings.setTargetWpm(v.round()),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('$kMinTargetWpm',
-                  style: const TextStyle(
-                      color: Color(0x33E2E2E2), fontSize: 10)),
-              Text('$kMaxTargetWpm',
-                  style: const TextStyle(
-                      color: Color(0x33E2E2E2), fontSize: 10)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Mascot picker
-// ---------------------------------------------------------------------------
-//
-// Lets the user browse for a PNG sprite sheet on their filesystem.
-// The file path is stored in SettingsController.customMascotPath.
-// Frame count can be adjusted with a simple stepper so any sheet works.
 
 class _MascotPicker extends StatelessWidget {
   final SettingsController settings;
   const _MascotPicker({required this.settings});
 
   Future<void> _browse() async {
-    const typeGroup = fs.XTypeGroup(
-      label: 'PNG sprite sheet',
-      extensions: ['png'],
-    );
-    final file = await fs.openFile(acceptedTypeGroups: [typeGroup]);
+    final file = await fs.openFile(acceptedTypeGroups: [
+      const fs.XTypeGroup(label: 'PNG sprite sheet', extensions: ['png']),
+    ]);
     if (file == null) return;
     settings.setCustomMascot(
-      path:       file.path,
-      frameCount: settings.customFrameCount,
-      frameWidth: settings.customFrameWidth,
+      path:        file.path,
+      frameCount:  settings.customFrameCount,
+      frameWidth:  settings.customFrameWidth,
       frameHeight: settings.customFrameHeight,
+    );
+  }
+
+  void _showGuide(BuildContext context) {
+    final s = settings;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: s.canvasColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        title: Text('Sprite Sheet Guide',
+            style: TextStyle(color: s.textColor, fontSize: 15,
+                fontWeight: FontWeight.w600, fontFamily: 'sans-serif')),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('A sprite sheet is a PNG with all animation frames arranged '
+                  'horizontally in a single row.',
+                  style: TextStyle(color: s.chromeTextColor, fontSize: 13,
+                      fontFamily: 'sans-serif', height: 1.5)),
+              const SizedBox(height: 16),
+              // Visual diagram drawn with Flutter widgets
+              _SpriteSheetDiagram(s: s),
+              const SizedBox(height: 16),
+              _GuideRow('Frame size', '80 × 80 px recommended', s),
+              _GuideRow('Layout',     'Left to right, single row', s),
+              _GuideRow('Format',     'PNG with transparency', s),
+              _GuideRow('Frames',     'Adjust the frame counter after loading', s),
+              const SizedBox(height: 8),
+              Text('QuillMate cycles through all frames at the configured FPS. '
+                  'Use more frames for smoother animation.',
+                  style: TextStyle(color: s.chromeTextColor.withOpacity(0.7),
+                      fontSize: 11, fontFamily: 'sans-serif', height: 1.5)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Got it',
+                style: TextStyle(color: s.primaryColor,
+                    fontWeight: FontWeight.w600, fontFamily: 'sans-serif')),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasCustom = settings.customMascotPath != null;
+    final s = settings;
+    final hasCustom = s.customMascotPath != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Current status
         Text(
-          hasCustom
-              ? settings.customMascotPath!.split('/').last
-              : 'Using built-in mascot',
+          hasCustom ? s.customMascotPath!.split('/').last : 'Using built-in mascot',
           style: TextStyle(
-            color:      hasCustom
-                ? const Color(0xFF7EC8E3)
-                : const Color(0x66E2E2E2),
-            fontSize:   11,
+            color:     hasCustom ? s.primaryColor : s.chromeTextColor.withOpacity(0.5),
+            fontSize:  11,
+            fontStyle: hasCustom ? FontStyle.normal : FontStyle.italic,
             fontFamily: 'sans-serif',
-            fontStyle:  hasCustom ? FontStyle.normal : FontStyle.italic,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 10),
-
-        // Browse / Reset buttons
         Row(
           children: [
-            _OutlineBtn(
-              label:     'Browse…',
-              color:     const Color(0xFF7EC8E3),
-              onPressed: _browse,
-            ),
+            _SBtn('Browse…', s.primaryColor, _browse),
             if (hasCustom) ...[
               const SizedBox(width: 8),
-              _OutlineBtn(
-                label:     'Reset',
-                color:     const Color(0x66E2E2E2),
-                onPressed: settings.clearCustomMascot,
-              ),
+              _SBtn('Reset', s.chromeTextColor, s.clearCustomMascot),
             ],
+            const Spacer(),
+            // Help link
+            GestureDetector(
+              onTap: () => _showGuide(context),
+              child: Row(
+                children: [
+                  Icon(Icons.help_outline, size: 13,
+                      color: s.primaryColor.withOpacity(0.8)),
+                  const SizedBox(width: 4),
+                  Text('View example',
+                      style: TextStyle(
+                        color:      s.primaryColor.withOpacity(0.8),
+                        fontSize:   11,
+                        fontFamily: 'sans-serif',
+                        decoration: TextDecoration.underline,
+                        decorationColor: s.primaryColor.withOpacity(0.5),
+                      )),
+                ],
+              ),
+            ),
           ],
         ),
-
         if (hasCustom) ...[
           const SizedBox(height: 14),
-          // Frame count stepper — lets the user match their sheet layout.
           Row(
             children: [
-              const Text('Frames',
-                  style: TextStyle(
-                      color: Color(0xAAE2E2E2),
-                      fontSize: 12,
-                      fontFamily: 'sans-serif')),
+              Text('Frames',
+                  style: TextStyle(color: s.chromeTextColor,
+                      fontSize: 12, fontFamily: 'sans-serif')),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.remove, size: 14),
-                color: const Color(0x88E2E2E2),
+                icon: Icon(Icons.remove, size: 14, color: s.chromeTextColor),
                 splashRadius: 14,
-                onPressed: settings.customFrameCount > 1
-                    ? () => settings.setCustomMascot(
-                          path:       settings.customMascotPath!,
-                          frameCount: settings.customFrameCount - 1,
-                          frameWidth:  settings.customFrameWidth,
-                          frameHeight: settings.customFrameHeight,
-                        )
+                onPressed: s.customFrameCount > 1
+                    ? () => s.setCustomMascot(
+                          path: s.customMascotPath!,
+                          frameCount: s.customFrameCount - 1,
+                          frameWidth: s.customFrameWidth,
+                          frameHeight: s.customFrameHeight)
                     : null,
               ),
-              Text(
-                '${settings.customFrameCount}',
-                style: const TextStyle(
-                  color:      Color(0xFF7EC8E3),
-                  fontSize:   16,
-                  fontFamily: 'monospace',
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text('${s.customFrameCount}',
+                  style: TextStyle(
+                      color: s.primaryColor, fontSize: 16,
+                      fontFamily: 'monospace', fontWeight: FontWeight.bold)),
               IconButton(
-                icon: const Icon(Icons.add, size: 14),
-                color: const Color(0x88E2E2E2),
+                icon: Icon(Icons.add, size: 14, color: s.chromeTextColor),
                 splashRadius: 14,
-                onPressed: () => settings.setCustomMascot(
-                  path:       settings.customMascotPath!,
-                  frameCount: settings.customFrameCount + 1,
-                  frameWidth:  settings.customFrameWidth,
-                  frameHeight: settings.customFrameHeight,
-                ),
+                onPressed: () => s.setCustomMascot(
+                  path: s.customMascotPath!,
+                  frameCount: s.customFrameCount + 1,
+                  frameWidth: s.customFrameWidth,
+                  frameHeight: s.customFrameHeight),
               ),
             ],
           ),
@@ -554,24 +498,157 @@ class _MascotPicker extends StatelessWidget {
   }
 }
 
-class _OutlineBtn extends StatelessWidget {
+class _GuideRow extends StatelessWidget {
+  final String             label;
+  final String             value;
+  final SettingsController s;
+  const _GuideRow(this.label, this.value, this.s);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 80,
+              child: Text(label,
+                  style: TextStyle(color: s.chromeTextColor, fontSize: 12,
+                      fontWeight: FontWeight.w600, fontFamily: 'sans-serif')),
+            ),
+            Expanded(
+              child: Text(value,
+                  style: TextStyle(color: s.textColor, fontSize: 12,
+                      fontFamily: 'sans-serif')),
+            ),
+          ],
+        ),
+      );
+}
+
+/// A simple drawn diagram showing a sprite sheet layout.
+class _SpriteSheetDiagram extends StatelessWidget {
+  final SettingsController s;
+  const _SpriteSheetDiagram({required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 72,
+      decoration: BoxDecoration(
+        color:        s.chromeColor,
+        border:       Border.all(color: s.borderColor),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: List.generate(4, (i) {
+          return Expanded(
+            child: Container(
+              margin: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                border: Border.all(color: s.primaryColor.withOpacity(0.4)),
+                borderRadius: BorderRadius.circular(3),
+                color: s.primaryColor.withOpacity(0.06),
+              ),
+              child: Center(
+                child: Text('f${i + 1}',
+                    style: TextStyle(
+                      color:      s.primaryColor,
+                      fontSize:   11,
+                      fontFamily: 'monospace',
+                    )),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class _SBtn extends StatelessWidget {
   final String       label;
   final Color        color;
   final VoidCallback onPressed;
-  const _OutlineBtn({required this.label, required this.color, required this.onPressed});
+  const _SBtn(this.label, this.color, this.onPressed);
 
   @override
   Widget build(BuildContext context) => OutlinedButton(
-    style: OutlinedButton.styleFrom(
-      foregroundColor: color,
-      side:            BorderSide(color: color.withOpacity(0.5)),
-      padding:         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      minimumSize:     Size.zero,
-      tapTargetSize:   MaterialTapTargetSize.shrinkWrap,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-    ),
-    onPressed: onPressed,
-    child: Text(label,
-        style: const TextStyle(fontSize: 12, fontFamily: 'sans-serif')),
-  );
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side:            BorderSide(color: color.withOpacity(0.4)),
+          padding:         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          minimumSize:     Size.zero,
+          tapTargetSize:   MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        ),
+        onPressed: onPressed,
+        child: Text(label,
+            style: const TextStyle(fontSize: 12, fontFamily: 'sans-serif')),
+      );
+}
+
+// ---------------------------------------------------------------------------
+// WPM slider
+// ---------------------------------------------------------------------------
+
+class _WpmSlider extends StatelessWidget {
+  final SettingsController settings;
+  const _WpmSlider({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = settings;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Target',
+                style: TextStyle(color: s.textColor, fontSize: 13,
+                    fontWeight: FontWeight.w600, fontFamily: 'sans-serif')),
+            const Spacer(),
+            Text('${s.targetWpm}',
+                style: TextStyle(color: s.primaryColor, fontSize: 20,
+                    fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+            Text(' wpm',
+                style: TextStyle(color: s.chromeTextColor.withOpacity(0.5),
+                    fontSize: 11, fontFamily: 'sans-serif')),
+          ],
+        ),
+        const SizedBox(height: 6),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor:   s.primaryColor,
+            inactiveTrackColor: s.borderColor,
+            thumbColor:         s.primaryColor,
+            overlayColor:       s.primaryColor.withOpacity(0.12),
+            trackHeight:        3,
+          ),
+          child: Slider(
+            value:     s.targetWpm.toDouble(),
+            min:       kMinTargetWpm.toDouble(),
+            max:       kMaxTargetWpm.toDouble(),
+            divisions: kMaxTargetWpm - kMinTargetWpm,
+            onChanged: (v) => s.setTargetWpm(v.round()),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('$kMinTargetWpm',
+                  style: TextStyle(
+                      color: s.chromeTextColor.withOpacity(0.4),
+                      fontSize: 10, fontFamily: 'sans-serif')),
+              Text('$kMaxTargetWpm',
+                  style: TextStyle(
+                      color: s.chromeTextColor.withOpacity(0.4),
+                      fontSize: 10, fontFamily: 'sans-serif')),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

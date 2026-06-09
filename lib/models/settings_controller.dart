@@ -125,6 +125,19 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---- Onboarding ----
+  // True once the user has explicitly set their WPM (via onboarding or settings).
+  // WritingScreen shows a first-run dialog until this is true.
+
+  bool _hasSetWpm = false;
+  bool get hasSetWpm => _hasSetWpm;
+
+  void markWpmSet() {
+    if (_hasSetWpm) return;
+    _hasSetWpm = true;
+    notifyListeners();
+  }
+
   // ---- Focus mode ----
 
   bool _focusMode = false;

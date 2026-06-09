@@ -114,17 +114,18 @@ const List<_FormatAction> _actions = [
 ];
 
 class FormattingBar extends StatelessWidget {
-  /// The controller of the active editor — used to read/modify text + selection.
   final TextEditingController controller;
   final SettingsController    settings;
-  /// Called after every formatting insertion so the activity monitor counts it.
   final VoidCallback          onChanged;
+  /// Called when the user clicks the collapse chevron.
+  final VoidCallback?         onCollapse;
 
   const FormattingBar({
     super.key,
     required this.controller,
     required this.settings,
     required this.onChanged,
+    this.onCollapse,
   });
 
   // ---- Core formatting logic ----
@@ -220,44 +221,71 @@ class FormattingBar extends StatelessWidget {
           bottom: BorderSide(color: s.borderColor, width: 1),
         ),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          children: _actions.map((action) {
-            return Tooltip(
-              message: action.tooltip,
-              waitDuration: const Duration(milliseconds: 600),
+      child: Row(
+        children: [
+          // Scrollable action buttons.
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: _actions.map((action) {
+                  return Tooltip(
+                    message: action.tooltip,
+                    waitDuration: const Duration(milliseconds: 600),
+                    child: InkWell(
+                      onTap: () => _apply(action),
+                      borderRadius: BorderRadius.circular(4),
+                      hoverColor: s.primaryColor.withOpacity(0.08),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (action.icon != null) ...[
+                              Icon(action.icon, size: 15,
+                                  color: s.chromeTextColor),
+                              const SizedBox(width: 4),
+                            ],
+                            Text(
+                              action.label,
+                              style: TextStyle(
+                                fontSize:   12,
+                                fontFamily: 'sans-serif',
+                                fontWeight: FontWeight.w500,
+                                color:      s.chromeTextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+
+          // Collapse chevron — pinned to the right edge.
+          if (onCollapse != null) ...[
+            Container(width: 1, height: 20, color: s.borderColor),
+            Tooltip(
+              message: 'Hide toolbar',
               child: InkWell(
-                onTap: () => _apply(action),
+                onTap: onCollapse,
                 borderRadius: BorderRadius.circular(4),
                 hoverColor: s.primaryColor.withOpacity(0.08),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (action.icon != null) ...[
-                        Icon(action.icon, size: 15, color: s.chromeTextColor),
-                        const SizedBox(width: 4),
-                      ],
-                      Text(
-                        action.label,
-                        style: TextStyle(
-                          fontSize:   12,
-                          fontFamily: 'sans-serif',
-                          fontWeight: FontWeight.w500,
-                          color:      s.chromeTextColor,
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: Icon(Icons.keyboard_arrow_up,
+                      size: 16, color: s.chromeTextColor),
                 ),
               ),
-            );
-          }).toList(),
-        ),
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -48,8 +48,9 @@ import 'settings_controller.dart';
 // ---------------------------------------------------------------------------
 
 /// Rolling window used for WPM calculation (milliseconds).
-/// 60 s gives stable readings; lower values react faster but fluctuate more.
-const int kWpmWindowMs = 60000;
+/// 10 s makes the mascot react to recent bursts, not historical averages.
+/// Example: idle 50 s then type 40 words in 10 s → immediately reads ~48 wpm.
+const int kWpmWindowMs = 10000;
 
 /// Seconds of silence before switching to [MascotState.encouraging].
 const int kIdleSecondsBeforeEncouraging = 10;
@@ -127,15 +128,12 @@ class WritingActivityController extends ChangeNotifier {
 
   // ---- WPM calculation ────────────────────────────────────────────────────
   //
-  // Example: 150 characters typed in 60 s
-  //   wpm = (150 / 5) / (60000 / 60000) = 30 / 1.0 = 30 wpm
+  // Example: 40 characters typed in the last 10 s
+  //   wpm = (40 / 5) / (10000 / 60000) = 8 / 0.1667 = 48 wpm
   //
-  // Example: 90 characters typed in 30 s (early in a session)
-  //   windowSecs = 30
-  //   wpm = (90 / 5) / (30 / 60) = 18 / 0.5 = 36 wpm
-  //
-  // The window never exceeds kWpmWindowMs, so wpm is always
-  // relative to the actual elapsed time, not a fixed 60 s assumption.
+  // If the user was idle for 50 s then types a burst, the old keypresses
+  // have already been pruned from the window, so the WPM reflects only
+  // the recent burst — exactly what we want for mascot reactivity.
 
   int _calculateWpm(int nowMs) {
     if (_recentPresses.isEmpty) return 0;
